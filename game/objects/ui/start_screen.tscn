@@ -1,0 +1,128 @@
+[gd_scene format=3 uid="uid://caen7kigx7dlg"]
+
+[ext_resource type="Script" uid="uid://s7bdasmdq78j" path="res://game/objects/ui/start_screen.gd" id="1"]
+[ext_resource type="Script" uid="uid://bw2j8ry5vk65i" path="res://game/objects/ui/start_screen_input.gd" id="2"]
+[ext_resource type="PackedScene" path="res://game/objects/ui/volume_slider.tscn" id="3"]
+
+[node name="StartScreen" type="Control" unique_id=726993046]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="." unique_id=540637218]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.141, 0.161, 0.224, 1)
+
+[node name="Title" type="Label" parent="." unique_id=731924267]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -200.0
+offset_top = 120.0
+offset_right = 200.0
+offset_bottom = 200.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 48
+text = "Roguelike 自走棋"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StartButton" type="Button" parent="." unique_id=1329686155]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -80.0
+offset_top = -160.0
+offset_right = 80.0
+offset_bottom = -100.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_font_sizes/font_size = 28
+text = "開始"
+
+[node name="SettingsButton" type="TextureButton" parent="." unique_id=2075114416]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -68.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = 68.0
+grow_horizontal = 0
+
+[node name="GearIcon" type="Label" parent="SettingsButton" unique_id=331043926]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 32
+text = "⚙"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SettingsPanel" type="PanelContainer" parent="." unique_id=1560335733]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -150.0
+offset_right = 200.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="SettingsPanel" unique_id=871550508]
+layout_mode = 2
+
+[node name="SettingsTitle" type="Label" parent="SettingsPanel/VBoxContainer" unique_id=1345704927]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "設定"
+horizontal_alignment = 1
+
+[node name="Separator" type="HSeparator" parent="SettingsPanel/VBoxContainer" unique_id=1107764925]
+layout_mode = 2
+
+[node name="MasterVolume" parent="SettingsPanel/VBoxContainer" unique_id=1320537985 instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+label_text = "總音量"
+
+[node name="SFXVolume" parent="SettingsPanel/VBoxContainer" unique_id=1765868331 instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+bus_name = "SFX"
+label_text = "音效"
+
+[node name="MusicVolume" parent="SettingsPanel/VBoxContainer" unique_id=1014940961 instance=ExtResource("3")]
+unique_name_in_owner = true
+layout_mode = 2
+bus_name = "Music"
+label_text = "音樂"
+
+[node name="Input" type="Node" parent="." unique_id=1416747180]
+unique_name_in_owner = true
+script = ExtResource("2")

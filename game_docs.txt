@@ -1,0 +1,8 @@
+🎮 Roguelike 構築型自走棋 — Godot 4.6.2 開發企劃書
+一、專案概要
+項目	內容
+引擎	Godot 4.6.2 (GDScript)
+類型	Roguelike × 策略 × 背包空間拼裝
+核心循環	家園宣告 → 局內構築 → 自動戰鬥驗收
+主要語言	GDScript
+目標平台	PC（Steam）為主，後續可評估 Mobile

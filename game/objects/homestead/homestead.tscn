@@ -1,0 +1,244 @@
+[gd_scene load_steps=16 format=3]
+
+[ext_resource type="Script" path="res://game/objects/homestead/homestead.gd" id="1"]
+[ext_resource type="Script" path="res://game/objects/homestead/player.gd" id="2"]
+
+;; ── 庭院牆壁形狀 ────────────────────────────────────────────
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cy_top"]
+size = Vector2(384, 8)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cy_bottom"]
+size = Vector2(384, 8)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cy_left"]
+size = Vector2(8, 648)
+
+;; ── 房間牆壁形狀 ────────────────────────────────────────────
+;; 上牆左段: x 384~672 (寬 288)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rm_top_left"]
+size = Vector2(288, 8)
+
+;; 上牆右段: x 768~1152 (寬 384)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rm_top_right"]
+size = Vector2(384, 8)
+
+;; 右牆
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rm_right"]
+size = Vector2(8, 648)
+
+;; 下牆
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rm_bottom"]
+size = Vector2(768, 8)
+
+;; 左牆上段: y 0~280 (高 280)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rm_left_top"]
+size = Vector2(8, 240)
+
+;; 左牆下段: y 368~648 (高 280)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_rm_left_bottom"]
+size = Vector2(8, 240)
+
+;; ── 門碰撞形狀 ──────────────────────────────────────────────
+;; 庭院入口 (垂直開口 88px)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_door_courtyard"]
+size = Vector2(16, 88)
+
+;; 遊戲門 (水平開口 88px)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_door_game"]
+size = Vector2(88, 16)
+
+;; ── 玩家碰撞形狀 ────────────────────────────────────────────
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
+size = Vector2(24, 24)
+
+;; ============================================================
+;; 家園場景佈局 (俯視角)
+;;
+;;  座標系:  畫面 1152 x 648 (假設 16:9)
+;;
+;;  ┌────────────┬────────────────────────┐
+;;  │            │    【DoorToGame 門】     │
+;;  │   庭院      │                        │
+;;  │  Courtyard  │ DoorTo   室內 Room      │
+;;  │ (0,0~384w) │ Courtyard              │
+;;  │            │←→                      │
+;;  │            │                        │
+;;  └────────────┴────────────────────────┘
+;;
+;;  庭院:   x=0   ~ 384,  y=0 ~ 648
+;;  房間:   x=384 ~ 1152, y=0 ~ 648
+;;  入口(左牆): x=384, y≈280~368  (房間左側中央)
+;;  門(上牆):   x≈720, y=0        (房間正上方中央)
+;; ============================================================
+
+;; ── 根節點 ──────────────────────────────────────────────────
+[node name="Homestead" type="Node2D"]
+script = ExtResource("1")
+
+;; ── Camera2D ────────────────────────────────────────────────
+[node name="Camera" type="Camera2D" parent="."]
+position = Vector2(576, 324)
+zoom = Vector2(1, 1)
+
+;; ── 庭院 (左側) ─────────────────────────────────────────────
+[node name="Courtyard" type="Node2D" parent="."]
+
+[node name="Floor" type="ColorRect" parent="Courtyard"]
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 384.0
+offset_bottom = 648.0
+color = Color(0.36, 0.54, 0.33, 1)
+
+[node name="CourtLabel" type="Label" parent="Courtyard"]
+offset_left = 140.0
+offset_top = 300.0
+offset_right = 260.0
+offset_bottom = 330.0
+text = "庭院"
+horizontal_alignment = 1
+
+;; 庭院四周牆壁 (StaticBody2D)
+[node name="Walls" type="StaticBody2D" parent="Courtyard"]
+
+[node name="WallTop" type="CollisionShape2D" parent="Courtyard/Walls"]
+position = Vector2(192, -4)
+shape = SubResource("RectangleShape2D_cy_top")
+
+[node name="WallBottom" type="CollisionShape2D" parent="Courtyard/Walls"]
+position = Vector2(192, 652)
+shape = SubResource("RectangleShape2D_cy_bottom")
+
+[node name="WallLeft" type="CollisionShape2D" parent="Courtyard/Walls"]
+position = Vector2(-4, 324)
+shape = SubResource("RectangleShape2D_cy_left")
+
+;; ── 室內房間 (中央+右側) ────────────────────────────────────
+[node name="Room" type="Node2D" parent="."]
+
+[node name="Floor" type="ColorRect" parent="Room"]
+offset_left = 384.0
+offset_top = 0.0
+offset_right = 1152.0
+offset_bottom = 648.0
+color = Color(0.25, 0.22, 0.18, 1)
+
+[node name="RoomLabel" type="Label" parent="Room"]
+offset_left = 700.0
+offset_top = 310.0
+offset_right = 840.0
+offset_bottom = 340.0
+text = "室內房間"
+horizontal_alignment = 1
+
+;; ── 房間牆壁 ────────────────────────────────────────────────
+[node name="Walls" type="StaticBody2D" parent="Room"]
+
+;; 上牆 — 左段 (門的左邊)
+[node name="WallTopLeft" type="CollisionShape2D" parent="Room/Walls"]
+position = Vector2(528, -4)
+shape = SubResource("RectangleShape2D_rm_top_left")
+
+;; 上牆 — 右段 (門的右邊)
+[node name="WallTopRight" type="CollisionShape2D" parent="Room/Walls"]
+position = Vector2(912, -4)
+shape = SubResource("RectangleShape2D_rm_top_right")
+
+;; 右牆
+[node name="WallRight" type="CollisionShape2D" parent="Room/Walls"]
+position = Vector2(1156, 324)
+shape = SubResource("RectangleShape2D_rm_right")
+
+;; 下牆
+[node name="WallBottom" type="CollisionShape2D" parent="Room/Walls"]
+position = Vector2(768, 652)
+shape = SubResource("RectangleShape2D_rm_bottom")
+
+;; 左牆 — 上段 (入口上方)
+[node name="WallLeftTop" type="CollisionShape2D" parent="Room/Walls"]
+position = Vector2(380, 120)
+shape = SubResource("RectangleShape2D_rm_left_top")
+
+;; 左牆 — 下段 (入口下方)
+[node name="WallLeftBottom" type="CollisionShape2D" parent="Room/Walls"]
+position = Vector2(380, 528)
+shape = SubResource("RectangleShape2D_rm_left_bottom")
+
+;; ── 門：通往庭院 (房間左牆入口) ──────────────────────────────
+[node name="DoorToCourtyard" type="Area2D" parent="Room"]
+position = Vector2(384, 324)
+collision_layer = 0
+collision_mask = 1
+monitoring = true
+
+[node name="Shape" type="CollisionShape2D" parent="Room/DoorToCourtyard"]
+shape = SubResource("RectangleShape2D_door_courtyard")
+
+[node name="Sprite" type="ColorRect" parent="Room/DoorToCourtyard"]
+offset_left = -8.0
+offset_top = -44.0
+offset_right = 8.0
+offset_bottom = 44.0
+color = Color(0.6, 0.45, 0.25, 1)
+
+[node name="DoorLabel" type="Label" parent="Room/DoorToCourtyard"]
+offset_left = -30.0
+offset_top = -64.0
+offset_right = 30.0
+offset_bottom = -46.0
+text = "← 庭院"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 11
+
+;; ── 門：通往遊戲 (房間正上方) ────────────────────────────────
+[node name="DoorToGame" type="Area2D" parent="Room"]
+position = Vector2(720, 0)
+collision_layer = 0
+collision_mask = 1
+monitoring = true
+
+[node name="Shape" type="CollisionShape2D" parent="Room/DoorToGame"]
+shape = SubResource("RectangleShape2D_door_game")
+
+[node name="Sprite" type="ColorRect" parent="Room/DoorToGame"]
+offset_left = -44.0
+offset_top = -8.0
+offset_right = 44.0
+offset_bottom = 8.0
+color = Color(0.7, 0.2, 0.2, 1)
+
+[node name="DoorLabel" type="Label" parent="Room/DoorToGame"]
+offset_left = -40.0
+offset_top = 10.0
+offset_right = 40.0
+offset_bottom = 30.0
+text = "進入遊戲 ↑"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 11
+
+;; ── 裝飾物容器 (日後動態新增) ────────────────────────────────
+[node name="Decorations" type="Node2D" parent="Room"]
+
+;; ── 玩家 ────────────────────────────────────────────────────
+[node name="Player" type="CharacterBody2D" parent="."]
+position = Vector2(700, 400)
+script = ExtResource("2")
+
+[node name="CollisionShape" type="CollisionShape2D" parent="Player"]
+shape = SubResource("RectangleShape2D_player")
+
+[node name="Sprite" type="ColorRect" parent="Player"]
+offset_left = -12.0
+offset_top = -12.0
+offset_right = 12.0
+offset_bottom = 12.0
+color = Color(0.3, 0.6, 0.9, 1)
+
+[node name="PlayerLabel" type="Label" parent="Player"]
+offset_left = -20.0
+offset_top = -30.0
+offset_right = 20.0
+offset_bottom = -14.0
+text = "P"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
