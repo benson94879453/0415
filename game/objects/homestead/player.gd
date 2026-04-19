@@ -10,6 +10,30 @@ signal interacted(target: Area2D)
 ## 目前在互動範圍內的 Area2D 清單
 var _nearby_interactables: Array[Area2D] = []
 
+## 互動提示 Label
+var _prompt_label: Label
+
+
+func _ready() -> void:
+	_prompt_label = Label.new()
+	_prompt_label.name = "InteractionPrompt"
+	_prompt_label.text = "[E] 互動"
+	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_prompt_label.offset_left = -40.0
+	_prompt_label.offset_top = -50.0
+	_prompt_label.offset_right = 40.0
+	_prompt_label.offset_bottom = -30.0
+	_prompt_label.add_theme_font_size_override("font_size", 14)
+	_prompt_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_prompt_label.add_theme_constant_override("outline_size", 2)
+	_prompt_label.z_index = 10
+	_prompt_label.visible = false
+	add_child(_prompt_label)
+
+
+func _process(_delta: float) -> void:
+	_prompt_label.visible = not _nearby_interactables.is_empty()
+
 
 func _physics_process(_delta: float) -> void:
 	var input_dir := Vector2(

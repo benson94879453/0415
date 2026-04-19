@@ -1,42 +1,39 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://bqoqgnqkdqrkd"]
 
-[ext_resource type="Script" path="res://game/objects/dungeon/dungeon.gd" id="1"]
-[ext_resource type="Script" path="res://game/objects/homestead/player.gd" id="2"]
+[ext_resource type="Script" uid="uid://cjfnhowrl87fx" path="res://game/objects/dungeon/dungeon.gd" id="1"]
+[ext_resource type="Script" uid="uid://c82ig1md67747" path="res://game/objects/homestead/player.gd" id="2"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
 size = Vector2(24, 24)
 
-;; ── 根節點 ──────────────────────────────────────────────────
-[node name="Dungeon" type="Node2D"]
+[node name="Dungeon" type="Node2D" unique_id=1444585432]
 script = ExtResource("1")
 
-;; ── Camera (固定在目前房間中心，不跟隨玩家) ──────────────────
-[node name="Camera" type="Camera2D" parent="."]
-position = Vector2(0, 0)
+[node name="Camera" type="Camera2D" parent="." unique_id=1879830934]
+unique_name_in_owner = true
 
-;; ── 房間容器 (動態生成) ─────────────────────────────────────
-[node name="Rooms" type="Node2D" parent="."]
+[node name="Rooms" type="Node2D" parent="." unique_id=1405727857]
+unique_name_in_owner = true
 
-;; ── 玩家 ────────────────────────────────────────────────────
-[node name="Player" type="CharacterBody2D" parent="."]
-position = Vector2(0, 0)
+[node name="Player" type="CharacterBody2D" parent="." unique_id=1907962038]
+unique_name_in_owner = true
 script = ExtResource("2")
 
-[node name="CollisionShape" type="CollisionShape2D" parent="Player"]
+[node name="CollisionShape" type="CollisionShape2D" parent="Player" unique_id=1603059201]
 shape = SubResource("RectangleShape2D_player")
 
-[node name="Sprite" type="ColorRect" parent="Player"]
+[node name="Sprite" type="ColorRect" parent="Player" unique_id=1467178927]
 offset_left = -12.0
 offset_top = -12.0
 offset_right = 12.0
 offset_bottom = 12.0
 color = Color(0.3, 0.6, 0.9, 1)
 
-[node name="PlayerLabel" type="Label" parent="Player"]
+[node name="PlayerLabel" type="Label" parent="Player" unique_id=1636010217]
 offset_left = -20.0
 offset_top = -30.0
 offset_right = 20.0
 offset_bottom = -14.0
+theme_override_font_sizes/font_size = 12
 text = "P"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 12

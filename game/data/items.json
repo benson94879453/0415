@@ -1,0 +1,79 @@
+{
+  "wooden_sword": {
+    "name": "木劍",
+    "type": "weapon",
+    "description": "一把普通的木劍",
+    "stats": { "attack": 5, "defense": 0, "speed": 0 },
+    "effects": [],
+    "set_id": "",
+    "icon_color": [0.6, 0.4, 0.2],
+    "can_rotate": true,
+    "shape": [[1], [1], [1], [1]]
+  },
+  "iron_shield": {
+    "name": "鐵盾",
+    "type": "armor",
+    "description": "提供基本防禦",
+    "stats": { "attack": 0, "defense": 8, "speed": -2 },
+    "effects": [],
+    "set_id": "",
+    "icon_color": [0.5, 0.5, 0.55],
+    "can_rotate": false,
+    "shape": [[1, 1], [1, 1]]
+  },
+  "swift_boots": {
+    "name": "疾速靴",
+    "type": "accessory",
+    "description": "提升移動速度",
+    "stats": { "attack": 0, "defense": 1, "speed": 5 },
+    "effects": [],
+    "set_id": "",
+    "icon_color": [0.2, 0.6, 0.4],
+    "can_rotate": false,
+    "shape": [[1]]
+  },
+  "health_potion": {
+    "name": "治療藥水",
+    "type": "consumable",
+    "description": "恢復30點生命值",
+    "stats": {},
+    "effects": [{ "type": "heal", "value": 30 }],
+    "set_id": "",
+    "icon_color": [0.8, 0.2, 0.2],
+    "can_rotate": false,
+    "shape": [[1]]
+  },
+  "fire_scroll": {
+    "name": "火焰卷軸",
+    "type": "consumable",
+    "description": "對周圍敵人造成火傷害",
+    "stats": {},
+    "effects": [{ "type": "damage_area", "value": 20, "element": "fire" }],
+    "set_id": "",
+    "icon_color": [0.9, 0.5, 0.1],
+    "can_rotate": false,
+    "shape": [[1]]
+  },
+  "dragon_set_helm": {
+    "name": "龍紋頭盔",
+    "type": "armor",
+    "description": "龍紋套裝部件",
+    "stats": { "attack": 3, "defense": 6, "speed": 0 },
+    "effects": [],
+    "set_id": "dragon",
+    "icon_color": [0.7, 0.15, 0.15],
+    "can_rotate": true,
+    "shape": [[1, 1]]
+  },
+  "dragon_set_armor": {
+    "name": "龍紋鎧甲",
+    "type": "armor",
+    "description": "龍紋套裝部件",
+    "stats": { "attack": 3, "defense": 12, "speed": -2 },
+    "effects": [],
+    "set_id": "dragon",
+    "icon_color": [0.65, 0.1, 0.1],
+    "can_rotate": true,
+    "shape": [[0, 0, 1], [1, 1, 1]]
+  }
+}

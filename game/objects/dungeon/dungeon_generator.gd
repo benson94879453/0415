@@ -4,17 +4,18 @@ extends RefCounted
 ## 地牢隨機佈局生成器 (元氣騎士風格)
 ##
 ## 規則：
-##   1. 從起始房間出發，在網格上向四鄰擴展放置房間。
-##   2. 相鄰房間不一定有通道，但每個房間至少與一個房間相通。
-##   3. 不存在無法到達的房間（從起點可達所有房間）。
-##   4. 所有非怪物房間（起點、菁英、商店、出口）必須與至少一個基礎怪物房間相鄰。
+##   1. 先建立「必經路」(spine)：START → MONSTER×N → EXIT 的線性鏈。
+##   2. 第 3 個怪物房間有 50% 機率出現在必經路上（避免玩家刻意繞過）。
+##   3. 菁英怪物房間一定不在必經路上（作為分支放置）。
+##   4. 其餘房間以分支形式接在已有房間旁。
+##   5. 所有非怪物房間至少與一個基礎怪物房間相鄰。
 ##
 ## 基本參數：
 ##   - 1 個起始房間
-##   - 3 個基礎怪物房間
-##   - 1 個出口房間（通往下一層）
-##   - 50% 機率出現 1 個菁英怪物房間
-##   - 50% 機率出現 1 個商店房間
+##   - 3 個基礎怪物房間（2~3 個在必經路上，隨機決定）
+##   - 1 個出口房間（必經路末端）
+##   - 50% 機率出現 1 個菁英怪物房間（分支）
+##   - 50% 機率出現 1 個商店房間（分支）
 
 const DIRS: Array[Vector2i] = [
 	Vector2i(0, -1),  # UP
@@ -65,58 +66,61 @@ func generate() -> Array[RoomData]:
 	rooms.clear()
 	room_map.clear()
 
-	# 決定本次有哪些房間要放
-	var types_to_place: Array[int] = []
-	# 3 個基礎怪物房間
-	for i in 3:
-		types_to_place.append(DungeonRoom.RoomType.MONSTER)
-	# 50% 菁英
-	if randf() < 0.5:
-		types_to_place.append(DungeonRoom.RoomType.ELITE)
-	# 50% 商店
-	if randf() < 0.5:
-		types_to_place.append(DungeonRoom.RoomType.SHOP)
-	# 1 個出口 (放在最後，確保離起點較遠)
-	types_to_place.append(DungeonRoom.RoomType.EXIT)
+	# 決定房間配置
+	var monster_count := 3
+	var has_elite := randf() < 0.5
+	var has_shop := randf() < 0.5
+	# 第 3 個怪物房間：50% 必經、50% 分支
+	var spine_monsters := monster_count - 1 + (1 if randf() < 0.5 else 0)
+	var branch_monsters := monster_count - spine_monsters
 
-	# 1) 放置起始房間
+	## ── Phase 1: 建立必經路 (spine) ──
+	## START → MONSTER × spine_monsters → EXIT
 	var start := RoomData.new(Vector2i.ZERO, DungeonRoom.RoomType.START)
 	_place_room(start)
 
-	# 2) 先放所有怪物房間 (因為其他房間需要與怪物房相鄰)
-	var monster_types: Array[int] = []
-	var special_types: Array[int] = []
-	for t in types_to_place:
-		if t == DungeonRoom.RoomType.MONSTER:
-			monster_types.append(t)
-		else:
-			special_types.append(t)
+	var spine_path: Array[Vector2i] = [Vector2i.ZERO]
+	var current_pos := Vector2i.ZERO
+	var last_dir: Vector2i = Vector2i.ZERO
 
-	# 放怪物房間：從已放置的房間中挑選空鄰位
-	for t in monster_types:
-w		var pos: Variant = _find_adjacent_empty_pos()
-		if pos == null:
-			push_warning("[DungeonGenerator] 無法放置怪物房間")
-			continue
-		var room := RoomData.new(pos as Vector2i, t)
-		_place_room(room)
+	for _i in spine_monsters:
+		var next_pos: Variant = _step_to_empty(current_pos, last_dir)
+		if next_pos == null:
+			push_warning("[DungeonGenerator] 必經路無法延伸")
+			break
+		last_dir = (next_pos as Vector2i) - current_pos
+		current_pos = next_pos as Vector2i
+		_place_room(RoomData.new(current_pos, DungeonRoom.RoomType.MONSTER))
+		spine_path.append(current_pos)
 
-	# 3) 放特殊房間 — 必須與至少一個怪物房間相鄰
-	for t in special_types:
-		var pos: Variant = _find_pos_adjacent_to_monster()
-		if pos == null:
-			# 退而求其次：任意空鄰位
-			pos = _find_adjacent_empty_pos()
-		if pos == null:
-			push_warning("[DungeonGenerator] 無法放置房間類型 %d" % t)
-			continue
-		var room := RoomData.new(pos as Vector2i, t)
-		_place_room(room)
+	# EXIT 在 spine 末端
+	var exit_pos: Variant = _step_to_empty(current_pos, last_dir)
+	if exit_pos != null:
+		current_pos = exit_pos as Vector2i
+	else:
+		push_warning("[DungeonGenerator] 必經路無法放置出口")
+	_place_room(RoomData.new(current_pos, DungeonRoom.RoomType.EXIT))
+	spine_path.append(current_pos)
 
-	# 4) 建立連接 (門)
+	# 立即連接 spine 鏈，確保必經路暢通
+	for i in spine_path.size() - 1:
+		_connect_rooms(spine_path[i], spine_path[i + 1])
+
+	## ── Phase 2: 分支房間 ──
+	var branch_types: Array[int] = []
+	for _i in branch_monsters:
+		branch_types.append(DungeonRoom.RoomType.MONSTER)
+	if has_elite:
+		branch_types.append(DungeonRoom.RoomType.ELITE)
+	if has_shop:
+		branch_types.append(DungeonRoom.RoomType.SHOP)
+	branch_types.shuffle()
+
+	for t in branch_types:
+		_place_branch(t)
+
+	## ── Phase 3: 建立連接 ──
 	_build_connections()
-
-	# 5) 驗證連通性，若不連通則補連接
 	_ensure_connectivity()
 
 	return rooms
@@ -127,45 +131,57 @@ func _place_room(room: RoomData) -> void:
 	room_map[room.grid_pos] = room
 
 
-## 在所有已放置房間的空鄰位中隨機選一個
-func _find_adjacent_empty_pos() -> Variant:
+## 從 pos 往隨機空位走一步；avoid_dir 是上一步方向（避免走回頭）
+func _step_to_empty(pos: Vector2i, avoid_dir: Vector2i) -> Variant:
 	var candidates: Array[Vector2i] = []
-	for room in rooms:
-		for d in DIRS:
-			var neighbor_pos: Vector2i = room.grid_pos + d
-			if neighbor_pos not in room_map:
-				candidates.append(neighbor_pos)
-	if candidates.is_empty():
-		return null
-	candidates.shuffle()
-	return candidates[0]
-
-
-## 找一個空位，且該空位至少與一個怪物房間相鄰
-func _find_pos_adjacent_to_monster() -> Variant:
-	var candidates: Array[Vector2i] = []
-	for room in rooms:
-		for d in DIRS:
-			var neighbor_pos: Vector2i = room.grid_pos + d
-			if neighbor_pos in room_map:
-				continue
-			# 檢查此空位的所有鄰居中是否有怪物房
-			if _has_monster_neighbor(neighbor_pos):
-				candidates.append(neighbor_pos)
-	if candidates.is_empty():
-		return null
-	candidates.shuffle()
-	return candidates[0]
-
-
-func _has_monster_neighbor(pos: Vector2i) -> bool:
 	for d in DIRS:
-		var np: Vector2i = pos + d
-		if np in room_map:
-			var r: RoomData = room_map[np]
-			if r.room_type == DungeonRoom.RoomType.MONSTER:
-				return true
-	return false
+		if d == -avoid_dir and avoid_dir != Vector2i.ZERO:
+			continue
+		var neighbor: Vector2i = pos + d
+		if neighbor not in room_map:
+			candidates.append(d)
+	if candidates.is_empty():
+		# 退而求其次，允許回頭
+		for d in DIRS:
+			var neighbor: Vector2i = pos + d
+			if neighbor not in room_map:
+				candidates.append(d)
+	if candidates.is_empty():
+		return null
+	candidates.shuffle()
+	return pos + candidates[0]
+
+
+## 在已有房間旁放置分支房間
+func _place_branch(type: int) -> void:
+	var parents: Array[RoomData] = []
+	for room in rooms:
+		# ELITE 只能從怪物房間分支，確保不在必經路上
+		if type == DungeonRoom.RoomType.ELITE:
+			if room.room_type != DungeonRoom.RoomType.MONSTER:
+				continue
+		parents.append(room)
+	parents.shuffle()
+
+	for parent in parents:
+		var pos: Variant = _find_empty_neighbor(parent.grid_pos)
+		if pos != null:
+			_place_room(RoomData.new(pos as Vector2i, type))
+			return
+	push_warning("[DungeonGenerator] 無法放置分支房間類型 %d" % type)
+
+
+## 取得 pos 的一個隨機空鄰位
+func _find_empty_neighbor(pos: Vector2i) -> Variant:
+	var candidates: Array[Vector2i] = []
+	for d in DIRS:
+		var neighbor: Vector2i = pos + d
+		if neighbor not in room_map:
+			candidates.append(neighbor)
+	if candidates.is_empty():
+		return null
+	candidates.shuffle()
+	return candidates[0]
 
 
 ## 為每對相鄰的房間建立連接 (門)

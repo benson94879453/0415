@@ -6,12 +6,15 @@ extends Node2D
 ## 只顯示當前房間，其他房間隱藏。
 ## 房間轉場使用 SceneTransition.fade_only()，沿用同一個 Player 實例。
 
-@onready var camera: Camera2D = $Camera
-@onready var player: CharacterBody2D = $Player
-@onready var rooms_container: Node2D = $Rooms
+@onready var camera: Camera2D = %Camera
+@onready var player: CharacterBody2D = %Player
+@onready var rooms_container: Node2D = %Rooms
 
 var _room_nodes: Dictionary = {}  # Vector2i → DungeonRoom
 var _current_grid_pos: Vector2i = Vector2i.ZERO
+var _map: DungeonMap
+var _player_inventory: PlayerInventory
+var _inventory_ui: InventoryUI
 
 
 func _ready() -> void:
@@ -35,8 +38,28 @@ func _generate_dungeon() -> void:
 		rooms_container.add_child(room)
 		_room_nodes[data.grid_pos] = room
 
-		# 等 _ready 後綁定門信號
-		room.ready.connect(_bind_room_doors.bind(room), CONNECT_ONE_SHOT)
+		# add_child 已同步觸發 room._ready()，門已建立，直接綁定
+		_bind_room_doors(room)
+
+	# 建立地圖系統
+	_map = DungeonMap.new()
+	add_child(_map)
+	_map.setup(generator.rooms, generator.room_map, Vector2i.ZERO)
+
+	# 建立背包系統
+	_player_inventory = PlayerInventory.new()
+	_inventory_ui = InventoryUI.new()
+	add_child(_inventory_ui)
+	_inventory_ui.setup(_player_inventory)
+
+	# 測試用：放入一些初始物品
+	_player_inventory.add_item(ItemInstance.new("wooden_sword"))
+	_player_inventory.add_item(ItemInstance.new("iron_shield"))
+	_player_inventory.add_item(ItemInstance.new("health_potion"))
+	_player_inventory.add_item(ItemInstance.new("health_potion"))
+	_player_inventory.add_item(ItemInstance.new("swift_boots"))
+	_player_inventory.add_item(ItemInstance.new("dragon_set_helm"))
+	_player_inventory.add_item(ItemInstance.new("dragon_set_armor"))
 
 
 func _bind_room_doors(room: DungeonRoom) -> void:
@@ -76,6 +99,10 @@ func _move_to_adjacent_room(from_pos: Vector2i, dir: int) -> void:
 
 func _do_room_switch(to_pos: Vector2i, dir: int) -> void:
 	_current_grid_pos = to_pos
+
+	# 更新地圖：標記已探索並更新當前位置
+	_map.mark_explored(to_pos)
+	_map.update_current_pos(to_pos)
 
 	# 清除玩家的互動清單
 	player._nearby_interactables.clear()
