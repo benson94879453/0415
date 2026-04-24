@@ -15,6 +15,7 @@ var _current_grid_pos: Vector2i = Vector2i.ZERO
 var _map: DungeonMap
 var _player_inventory: PlayerInventory
 var _inventory_ui: InventoryUI
+var _combat_player: CombatPlayer
 
 
 func _ready() -> void:
@@ -52,14 +53,20 @@ func _generate_dungeon() -> void:
 	add_child(_inventory_ui)
 	_inventory_ui.setup(_player_inventory)
 
+	# 初始化背包數值評估器
+	InventoryEvaluator.setup(_player_inventory)
+
 	# 測試用：放入一些初始物品
 	_player_inventory.add_item(ItemInstance.new("wooden_sword"))
-	_player_inventory.add_item(ItemInstance.new("iron_shield"))
+	_player_inventory.add_item(ItemInstance.new("wooden_shield"))
 	_player_inventory.add_item(ItemInstance.new("health_potion"))
 	_player_inventory.add_item(ItemInstance.new("health_potion"))
 	_player_inventory.add_item(ItemInstance.new("swift_boots"))
 	_player_inventory.add_item(ItemInstance.new("dragon_set_helm"))
 	_player_inventory.add_item(ItemInstance.new("dragon_set_armor"))
+
+	# 測試用：在起始房間生成一個敵人
+	_spawn_test_enemies()
 
 
 func _bind_room_doors(room: DungeonRoom) -> void:
@@ -159,3 +166,17 @@ func _place_player_in_start() -> void:
 	var start_world: Vector2 = DungeonRoom.grid_to_world(Vector2i.ZERO)
 	player.global_position = start_world
 	camera.position = start_world
+
+
+func _spawn_test_enemies() -> void:
+	# 在起始房間中心附近生成 3 個測試敵人
+	var start_world: Vector2 = DungeonRoom.grid_to_world(Vector2i.ZERO)
+	for i in 3:
+		var enemy := EnemyBase.new()
+		enemy.max_hp = 30.0
+		enemy.move_speed = 80.0
+		enemy.contact_damage = 5.0
+		var angle := (i as float) * TAU / 3.0
+		enemy.global_position = start_world + Vector2(cos(angle), sin(angle)) * 150.0
+		rooms_container.add_child(enemy)
+		enemy.setup(player)

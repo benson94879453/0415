@@ -10,6 +10,16 @@ signal contents_changed
 var width: int = 1
 var height: int = 1
 
+
+## 格子索引 → 行號
+func _row(idx: int) -> int:
+	return floori(idx / float(width))
+
+
+## 格子索引 → 列號
+func _col(idx: int) -> int:
+	return idx % width
+
 ## _grid[slot_index] = reference to ItemInstance occupying that cell, or null
 var _grid: Array = []
 
@@ -36,7 +46,7 @@ func pos_to_index(x: int, y: int) -> int:
 
 
 func index_to_pos(idx: int) -> Vector2i:
-	return Vector2i(idx % width, idx / width)
+	return Vector2i(_col(idx), _row(idx))
 
 
 func get_item_at(idx: int) -> ItemInstance:
@@ -56,10 +66,10 @@ func get_occupied_slots(item: ItemInstance) -> Array[int]:
 	var shape: Array = item.get_rotated_shape()
 	var rows: int = shape.size()
 	var cols: int = (shape[0] as Array).size()
-	var cx: int = item.center_slot % width
-	var cy: int = item.center_slot / width
-	var start_x: int = cx - cols / 2
-	var start_y: int = cy - rows / 2
+	var cx: int = _col(item.center_slot)
+	var cy: int = _row(item.center_slot)
+	var start_x: int = cx - (cols >> 1)
+	var start_y: int = cy - (rows >> 1)
 	for y in rows:
 		var row: Array = shape[y] as Array
 		for x in cols:
@@ -75,10 +85,10 @@ func can_place_at(item: ItemInstance, center_idx: int, ignore_item: ItemInstance
 	var shape: Array = item.get_rotated_shape()
 	var rows: int = shape.size()
 	var cols: int = (shape[0] as Array).size()
-	var cx: int = center_idx % width
-	var cy: int = center_idx / width
-	var start_x: int = cx - cols / 2
-	var start_y: int = cy - rows / 2
+	var cx: int = _col(center_idx)
+	var cy: int = _row(center_idx)
+	var start_x: int = cx - (cols >> 1)
+	var start_y: int = cy - (rows >> 1)
 	for y in rows:
 		var row: Array = shape[y] as Array
 		for x in cols:
@@ -116,8 +126,8 @@ func can_place_at_anchor(item: ItemInstance, target_slot: int, anchor_offset: Ve
 	var shape: Array = item.get_rotated_shape()
 	var rows: int = shape.size()
 	var cols: int = (shape[0] as Array).size()
-	var tx: int = target_slot % width
-	var ty: int = target_slot / width
+	var tx: int = _col(target_slot)
+	var ty: int = _row(target_slot)
 	var start_x: int = tx - anchor_offset.x
 	var start_y: int = ty - anchor_offset.y
 	for y in rows:
@@ -142,13 +152,13 @@ func place_at_anchor(item: ItemInstance, target_slot: int, anchor_offset: Vector
 	var shape: Array = item.get_rotated_shape()
 	var rows: int = shape.size()
 	var cols: int = (shape[0] as Array).size()
-	var tx: int = target_slot % width
-	var ty: int = target_slot / width
+	var tx: int = _col(target_slot)
+	var ty: int = _row(target_slot)
 	var start_x: int = tx - anchor_offset.x
 	var start_y: int = ty - anchor_offset.y
 	# 計算 center_slot（用於序列化）
-	var center_x: int = start_x + cols / 2
-	var center_y: int = start_y + rows / 2
+	var center_x: int = start_x + (cols >> 1)
+	var center_y: int = start_y + (rows >> 1)
 	item.center_slot = center_y * width + center_x
 	# 寫入 grid
 	for y in rows:

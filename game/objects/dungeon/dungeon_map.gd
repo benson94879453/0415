@@ -298,4 +298,4 @@ func _compute_fullmap_center() -> Vector2i:
 		min_y = mini(min_y, room.grid_pos.y)
 		max_x = maxi(max_x, room.grid_pos.x)
 		max_y = maxi(max_y, room.grid_pos.y)
-	return Vector2i((min_x + max_x) / 2, (min_y + max_y) / 2)
+	return Vector2i((min_x + max_x) >> 1, (min_y + max_y) >> 1)

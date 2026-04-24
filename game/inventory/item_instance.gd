@@ -90,9 +90,9 @@ static func rotate_90_cw(shape: Array) -> Array:
 
 
 ## 將形狀旋轉 orientation 次 90° CW
-static func rotate_shape(shape: Array, orientation: int) -> Array:
+static func rotate_shape(shape: Array, p_orientation: int) -> Array:
 	var result := shape
-	var times := orientation % 4
+	var times := p_orientation % 4
 	for _i in times:
 		result = rotate_90_cw(result)
 	return result
