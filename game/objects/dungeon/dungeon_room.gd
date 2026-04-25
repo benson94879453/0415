@@ -429,9 +429,12 @@ func reveal_north_slots() -> void:
 
 ## 新增連接方向並重建牆壁（由 dungeon.gd 在藍圖放置後呼叫）
 func add_connection_door(dir: int) -> void:
-	if dir in connections:
+	var has_connection := dir in connections
+	var has_door_area := dir in door_areas and is_instance_valid(door_areas[dir])
+	if has_connection and has_door_area:
 		return
-	connections.append(dir)
+	if not has_connection:
+		connections.append(dir)
 	# 清除舊的牆壁/門節點，重建
 	for child in _walls_container.get_children():
 		child.queue_free()
