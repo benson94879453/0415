@@ -15,6 +15,7 @@ var _current_grid_pos: Vector2i = Vector2i.ZERO
 var _map: DungeonMap
 var _player_inventory: PlayerInventory
 var _inventory_ui: InventoryUI
+var _ground_ui: GroundContainerUI
 var _combat_player: CombatPlayer
 
 
@@ -40,6 +41,7 @@ func _generate_dungeon() -> void:
 		_room_nodes[data.grid_pos] = room
 
 		# add_child 已同步觸發 room._ready()，門已建立，直接綁定
+		room.set_player(player)
 		_bind_room_doors(room)
 
 	# 建立地圖系統
@@ -52,6 +54,10 @@ func _generate_dungeon() -> void:
 	_inventory_ui = InventoryUI.new()
 	add_child(_inventory_ui)
 	_inventory_ui.setup(_player_inventory)
+	_inventory_ui.item_dropped_from_inventory.connect(_on_inventory_item_dropped)
+
+	_ground_ui = GroundContainerUI.new()
+	add_child(_ground_ui)
 
 	# 初始化背包數值評估器
 	InventoryEvaluator.setup(_player_inventory)
@@ -85,6 +91,9 @@ func _bind_room_doors(room: DungeonRoom) -> void:
 func _on_player_interacted(target: Area2D) -> void:
 	if SceneTransition.is_transitioning():
 		return
+	if target is GroundItemVisual:
+		_open_ground_container(target)
+		return
 	# 找到目標門所屬的房間和方向
 	for grid_pos in _room_nodes:
 		var room: DungeonRoom = _room_nodes[grid_pos]
@@ -99,6 +108,8 @@ func _move_to_adjacent_room(from_pos: Vector2i, dir: int) -> void:
 	var to_pos: Vector2i = from_pos + offset
 	if to_pos not in _room_nodes:
 		return
+	if _ground_ui != null:
+		_ground_ui.close()
 
 	# 使用 fade 轉場，在全黑時搬移玩家和切換可見房間
 	SceneTransition.fade_only(_do_room_switch.bind(to_pos, dir), 0.3)
@@ -180,3 +191,29 @@ func _spawn_test_enemies() -> void:
 		enemy.global_position = start_world + Vector2(cos(angle), sin(angle)) * 150.0
 		rooms_container.add_child(enemy)
 		enemy.setup(player)
+
+
+func _get_current_room() -> DungeonRoom:
+	return _room_nodes.get(_current_grid_pos, null)
+
+
+func _open_ground_container(target: GroundItemVisual) -> void:
+	if target == null or target.room_ref == null:
+		return
+	var room = target.room_ref
+	if room != _get_current_room():
+		return
+	if _inventory_ui != null and _inventory_ui._is_open:
+		_inventory_ui.toggle()
+	_ground_ui.setup(room.ground_container, _player_inventory, player, target.global_position, room)
+	_ground_ui.open()
+
+
+func _on_inventory_item_dropped(item: ItemInstance) -> void:
+	var room := _get_current_room()
+	if room == null:
+		_player_inventory.add_item(item)
+		return
+	var local_drop_pos := room.to_local(player.global_position)
+	if not room.add_ground_item(item, local_drop_pos):
+		_player_inventory.add_item(item)

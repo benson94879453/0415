@@ -1,6 +1,9 @@
 class_name InventoryUI
 extends CanvasLayer
 
+## 當物品從背包中丟棄時發出（拖出面板或按 Q 鍵）
+signal item_dropped_from_inventory(item: ItemInstance)
+
 ## 背包 UI
 ## 格子背景 (_grid_container) 與物品圖層 (_item_layer) 分離
 ## 物品圖層使用 TextureRect 跨越多格顯示，mouse_filter=IGNORE 讓點擊穿透到格子
@@ -20,6 +23,7 @@ var _drag_original_orientation: int = 0
 var _drag_anchor: Vector2i = Vector2i.ZERO  ## 被抓取格在 shape 矩陣中的座標
 var _drag_icon_offset: Vector2 = Vector2.ZERO  ## drag icon 偏移量（讓抓取格對齊滑鼠）
 var _hover_slot: int = -1  ## 拖曳中滑鼠懸停的格子索引（-1 = 無）
+var _hovered_item_slot: int = -1  ## 非拖曳狀態下，滑鼠懸停的格子索引（供 Q 鍵丟棄使用）
 var _drag_icon: Control
 var _grid_container: GridContainer
 var _item_layer: Control  ## 物品紋理圖層，疊在 grid 正上方
@@ -101,6 +105,7 @@ func toggle() -> void:
 	_panel.visible = _is_open
 	_bg_overlay.visible = _is_open
 	_tooltip.visible = false
+	_hovered_item_slot = -1
 	if _is_open:
 		_refresh_items()
 
@@ -328,6 +333,11 @@ func _input(event: InputEvent) -> void:
 	if not _is_open:
 		return
 
+	if event.is_action_pressed("dropitem") and not _dragging:
+		_drop_hovered_item()
+		get_viewport().set_input_as_handled()
+		return
+
 	if event is InputEventMouseButton:
 		_handle_mouse_button(event)
 	elif event is InputEventMouseMotion:
@@ -388,10 +398,12 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 	if _dragging:
 		_tooltip.visible = false
 		return
+	_hovered_item_slot = -1
 	var idx := _get_slot_at_position(event.global_position)
 	if idx >= 0:
 		var item: ItemInstance = _inventory.find_item_at(idx)
 		if item != null:
+			_hovered_item_slot = idx
 			var item_name := item.get_display_name()
 			var def := item.get_definition()
 			var desc: String = def.get("description", "")
@@ -493,9 +505,10 @@ func _end_drag(target_slot: int) -> void:
 	# 恢復舊方向 — 所有 remove_item 必須在舊方向下執行
 	item.orientation = old_orientation
 
-	# Dropped outside panel → remove from inventory
+	# Dropped outside panel → transfer to ground via signal
 	if target_slot < 0:
 		_inventory.remove_item(item)
+		item_dropped_from_inventory.emit(item)
 		_clear_drag()
 		return
 
@@ -533,9 +546,25 @@ func _clear_drag() -> void:
 	_drag_original_center = -1
 	_drag_original_orientation = 0
 	_hover_slot = -1
+	_hovered_item_slot = -1
 	_drag_icon.visible = false
 	_tooltip.visible = false
 	_refresh_items()
+
+
+func _drop_hovered_item() -> void:
+	if _hovered_item_slot < 0:
+		return
+	var item: ItemInstance = _inventory.find_item_at(_hovered_item_slot)
+	if item == null:
+		return
+	# 清除此物品在 hotbar 中的綁定
+	for i in _inventory.hotbar.size():
+		if _inventory.hotbar[i] == item.center_slot:
+			_inventory.hotbar[i] = -1
+	_inventory.remove_item(item)
+	item_dropped_from_inventory.emit(item)
+	_hovered_item_slot = -1
 
 
 func _try_move(item: ItemInstance, target_slot: int, old_center: int, old_orientation: int, _new_orientation: int) -> void:
