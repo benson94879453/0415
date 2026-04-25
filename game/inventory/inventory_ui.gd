@@ -103,6 +103,7 @@ func _ready() -> void:
 	# Slot icon panel — shown above inventory when dragging blueprints
 	_slot_icon_panel = HBoxContainer.new()
 	_slot_icon_panel.name = "SlotIconPanel"
+	_slot_icon_panel.set_anchors_preset(Control.PRESET_CENTER)
 	_slot_icon_panel.visible = false
 	add_child(_slot_icon_panel)
 
