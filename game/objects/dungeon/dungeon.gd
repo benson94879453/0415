@@ -54,14 +54,12 @@ func _init_dungeon() -> void:
 	# 初始化背包數值評估器
 	InventoryEvaluator.setup(_player_inventory)
 
-	# 測試用：放入一些初始物品
+	# 初始物品：基礎戰鬥物品 + 2 個隨機藍圖
 	_player_inventory.add_item(ItemInstance.new("wooden_sword"))
-	_player_inventory.add_item(ItemInstance.new("wooden_shield"))
 	_player_inventory.add_item(ItemInstance.new("health_potion"))
 	_player_inventory.add_item(ItemInstance.new("health_potion"))
-	_player_inventory.add_item(ItemInstance.new("swift_boots"))
-	_player_inventory.add_item(ItemInstance.new("dragon_set_helm"))
-	_player_inventory.add_item(ItemInstance.new("dragon_set_armor"))
+	_player_inventory.add_item(ItemInstance.new(_random_blueprint_id()))
+	_player_inventory.add_item(ItemInstance.new(_random_blueprint_id()))
 
 
 ## 根據 RoomData 建立 DungeonRoom 節點
@@ -73,6 +71,7 @@ func _create_room_node(data: DungeonGenerator.RoomData) -> DungeonRoom:
 	room.position = DungeonRoom.grid_to_world(data.grid_pos)
 	rooms_container.add_child(room)
 	room.set_player(player)
+	room.room_cleared.connect(_on_room_cleared)
 	_bind_room_doors(room)
 	_room_nodes[data.grid_pos] = room
 	return room
@@ -334,3 +333,26 @@ func _apply_blueprint_to_slot(item: ItemInstance, slot_node: Area2D) -> void:
 		item.item_id,
 	])
 	# 藍圖消耗 — 不返還背包
+
+
+## 獲取隨機藍圖 ID（獎勵池）
+func _random_blueprint_id() -> String:
+	var pool = ["bp_monster_room", "bp_elite_room", "bp_shop_room"]
+	return pool[randi() % pool.size()]
+
+
+## 處理房間清除事件：為 MONSTER / ELITE 房間首次清除時發放藍圖獎勵
+func _on_room_cleared(room: DungeonRoom) -> void:
+	# 防止重複發放獎勵
+	if room.reward_granted:
+		return
+	# 只對 MONSTER 和 ELITE 房間發放獎勵
+	if room.room_type != DungeonRoom.RoomType.MONSTER and room.room_type != DungeonRoom.RoomType.ELITE:
+		return
+	# 標記獎勵已發放
+	room.reward_granted = true
+	# 發放隨機藍圖
+	var blueprint_id = _random_blueprint_id()
+	var blueprint_item = ItemInstance.new(blueprint_id)
+	_player_inventory.add_item(blueprint_item)
+	print("[Dungeon] Blueprint reward: %s granted for clearing room" % blueprint_id)
