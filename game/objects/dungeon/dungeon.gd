@@ -46,6 +46,7 @@ func _init_dungeon() -> void:
 	add_child(_inventory_ui)
 	_inventory_ui.setup(_player_inventory)
 	_inventory_ui.item_dropped_from_inventory.connect(_on_inventory_item_dropped)
+	_inventory_ui.blueprint_dropped_at_slot.connect(_on_blueprint_dropped_at_slot)
 
 	_ground_ui = GroundContainerUI.new()
 	add_child(_ground_ui)
@@ -228,3 +229,34 @@ func _on_inventory_item_dropped(item: ItemInstance) -> void:
 	var local_drop_pos := room.to_local(player.global_position)
 	if not room.add_ground_item(item, local_drop_pos):
 		_player_inventory.add_item(item)
+
+
+func _on_blueprint_dropped_at_slot(item: ItemInstance, screen_pos: Vector2) -> void:
+	var room := _get_current_room()
+	if room == null:
+		_player_inventory.add_item(item)
+		return
+	# Convert screen position to world position
+	var world_pos: Vector2 = get_viewport().canvas_transform.affine_inverse() * screen_pos
+	# Search for Door or WallSlot nodes in the current room
+	var candidates: Array[Node] = room.find_children("*", "Area2D")
+	var nearest_slot: Area2D = null
+	var nearest_dist: float = 80.0  # max detection distance in pixels
+	for node in candidates:
+		if not (node is Door or node is WallSlot):
+			continue
+		var slot: Area2D = node as Area2D
+		var dist: float = world_pos.distance_to(slot.global_position)
+		if dist < nearest_dist:
+			nearest_dist = dist
+			nearest_slot = slot
+	if nearest_slot != null:
+		print("[Dungeon] Blueprint '%s' dropped near slot at %s" % [item.item_id, nearest_slot.global_position])
+		_apply_blueprint_to_slot(item, nearest_slot)
+	else:
+		print("[Dungeon] No valid slot found, restoring blueprint to inventory")
+		_player_inventory.add_item(item)
+
+
+func _apply_blueprint_to_slot(item: ItemInstance, slot_node: Area2D) -> void:
+	print("[Dungeon] Blueprint %s applied to slot at %s" % [item.item_id, slot_node.position])

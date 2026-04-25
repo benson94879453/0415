@@ -4,6 +4,9 @@ extends CanvasLayer
 ## 當物品從背包中丟棄時發出（拖出面板或按 Q 鍵）
 signal item_dropped_from_inventory(item: ItemInstance)
 
+## 當藍圖物品被拖到地牢插槽上時發出
+signal blueprint_dropped_at_slot(item: ItemInstance, screen_pos: Vector2)
+
 ## 背包 UI
 ## 格子背景 (_grid_container) 與物品圖層 (_item_layer) 分離
 ## 物品圖層使用 TextureRect 跨越多格顯示，mouse_filter=IGNORE 讓點擊穿透到格子
@@ -508,7 +511,10 @@ func _end_drag(target_slot: int) -> void:
 	# Dropped outside panel → transfer to ground via signal
 	if target_slot < 0:
 		_inventory.remove_item(item)
-		item_dropped_from_inventory.emit(item)
+		if item.get_definition().get("item_category", "") == "blueprint":
+			blueprint_dropped_at_slot.emit(item, get_viewport().get_mouse_position())
+		else:
+			item_dropped_from_inventory.emit(item)
 		_clear_drag()
 		return
 
