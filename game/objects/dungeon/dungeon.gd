@@ -19,6 +19,8 @@ var _player_inventory: PlayerInventory
 var _inventory_ui: InventoryUI
 var _ground_ui: GroundContainerUI
 var _combat_player: CombatPlayer
+var _selected_slot_index: int = -1  # Track which north slot is selected
+var _slot_targets: Array[Area2D] = []  # Cached list of visible Door/WallSlot in current room
 
 
 func _ready() -> void:
@@ -27,6 +29,17 @@ func _ready() -> void:
 	player.interacted.connect(_on_player_interacted)
 	# 延遲一幀確保所有房間的 _ready 完成後再設定可見性
 	_show_only_current_room.call_deferred()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Tab key: cycle through visible slots
+	if event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
+		_cycle_slot_selection()
+		get_viewport().set_input_as_handled()
+	# E key (interact action): apply blueprint to selected slot
+	elif event.is_action_pressed("interact") and _selected_slot_index >= 0:
+		_apply_blueprint_to_selected_slot()
+		get_viewport().set_input_as_handled()
 
 
 ## 初始化地牢：建立生成器，只建立 START 房間
@@ -112,6 +125,10 @@ func _bind_door_signals(area: Area2D) -> void:
 
 ## 進入房間：更新位置、地圖、移動玩家和相機、顯示當前房間
 func _on_enter_room(room: DungeonRoom) -> void:
+	# Reset slot selection when entering new room
+	_selected_slot_index = -1
+	_slot_targets.clear()
+
 	_current_grid_pos = room.grid_pos
 
 	# 更新地圖
@@ -356,3 +373,80 @@ func _on_room_cleared(room: DungeonRoom) -> void:
 	var blueprint_item = ItemInstance.new(blueprint_id)
 	_player_inventory.add_item(blueprint_item)
 	print("[Dungeon] Blueprint reward: %s granted for clearing room" % blueprint_id)
+
+
+## Cycle through visible Door/WallSlot nodes with Tab key
+func _cycle_slot_selection() -> void:
+	var current_room := _get_current_room()
+	if current_room == null:
+		return
+
+	# Build fresh list of visible Door/WallSlot nodes from north_slots
+	_slot_targets.clear()
+	if current_room.has_method("get_north_slots"):
+		for slot in current_room.get_north_slots():
+			if slot is Door or slot is WallSlot:
+				# Check if the slot is visible (parent node visible)
+				if slot.get_parent() != null and slot.get_parent().visible:
+					_slot_targets.append(slot)
+
+	# If no visible slots, clear selection and return
+	if _slot_targets.is_empty():
+		if _selected_slot_index >= 0:
+			# Clear previous highlight if any
+			_set_slot_highlight(_selected_slot_index, false)
+			_selected_slot_index = -1
+		print("[Dungeon] No visible slots to select")
+		return
+
+	# Cycle to next slot (wrap around)
+	var old_index := _selected_slot_index
+	_selected_slot_index = (_selected_slot_index + 1) % _slot_targets.size()
+
+	# Update highlights
+	if old_index >= 0 and old_index < _slot_targets.size():
+		_set_slot_highlight(old_index, false)
+	_set_slot_highlight(_selected_slot_index, true)
+
+	print("[Dungeon] Selected slot %d of %d" % [_selected_slot_index, _slot_targets.size()])
+
+
+## Apply blueprint to the currently selected slot (E key)
+func _apply_blueprint_to_selected_slot() -> void:
+	if _selected_slot_index < 0 or _selected_slot_index >= _slot_targets.size():
+		return
+
+	var current_room := _get_current_room()
+	if current_room == null:
+		return
+
+	# Find first blueprint in inventory
+	var blueprint_item: ItemInstance = null
+	for item in _player_inventory.get_all_items():
+		var definition = item.get_definition()
+		if definition.has("item_category") and definition["item_category"] == "blueprint":
+			blueprint_item = item
+			break
+
+	if blueprint_item == null:
+		print("[Dungeon] No blueprint in inventory")
+		return
+
+	# Remove blueprint from inventory
+	_player_inventory.remove_item(blueprint_item)
+
+	# Apply blueprint to selected slot
+	var selected_slot = _slot_targets[_selected_slot_index]
+	_apply_blueprint_to_slot(blueprint_item, selected_slot)
+
+	# Reset selection after applying
+	_selected_slot_index = -1
+
+
+## Set highlight on a slot by index
+func _set_slot_highlight(index: int, enabled: bool) -> void:
+	if index < 0 or index >= _slot_targets.size():
+		return
+	var slot = _slot_targets[index]
+	if slot.has_method("set_highlight"):
+		slot.set_highlight(enabled)
