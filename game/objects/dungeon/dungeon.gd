@@ -1,7 +1,8 @@
 extends Node2D
 
 ## 地牢場景
-## 使用 DungeonGenerator 隨機生成房間佈局。
+## 使用 DungeonGenerator 動態建立房間：初始化時只有 START，
+## 隨玩家向北推進逐一建立新房間（Task 3 負責）。
 ## Camera 固定在目前房間中心，不跟隨玩家。
 ## 只顯示當前房間，其他房間隱藏。
 ## 房間轉場使用 SceneTransition.fade_only()，沿用同一個 Player 實例。
@@ -12,6 +13,7 @@ extends Node2D
 
 var _room_nodes: Dictionary = {}  # Vector2i → DungeonRoom
 var _current_grid_pos: Vector2i = Vector2i.ZERO
+var _generator: DungeonGenerator
 var _map: DungeonMap
 var _player_inventory: PlayerInventory
 var _inventory_ui: InventoryUI
@@ -20,34 +22,23 @@ var _combat_player: CombatPlayer
 
 
 func _ready() -> void:
-	_generate_dungeon()
-	_place_player_in_start()
+	_init_dungeon()
+	_on_enter_room(_room_nodes[Vector2i.ZERO])
 	player.interacted.connect(_on_player_interacted)
 	# 延遲一幀確保所有房間的 _ready 完成後再設定可見性
 	_show_only_current_room.call_deferred()
 
 
-func _generate_dungeon() -> void:
-	var generator := DungeonGenerator.new()
-	var room_datas: Array[DungeonGenerator.RoomData] = generator.generate()
-
-	for data in room_datas:
-		var room := DungeonRoom.new()
-		room.room_type = data.room_type
-		room.grid_pos = data.grid_pos
-		room.connections = data.connections
-		room.position = DungeonRoom.grid_to_world(data.grid_pos)
-		rooms_container.add_child(room)
-		_room_nodes[data.grid_pos] = room
-
-		# add_child 已同步觸發 room._ready()，門已建立，直接綁定
-		room.set_player(player)
-		_bind_room_doors(room)
+## 初始化地牢：建立生成器，只建立 START 房間
+func _init_dungeon() -> void:
+	_generator = DungeonGenerator.new()
+	var start_data: DungeonGenerator.RoomData = _generator.init_run()
+	_create_room_node(start_data)
 
 	# 建立地圖系統
 	_map = DungeonMap.new()
 	add_child(_map)
-	_map.setup(generator.rooms, generator.room_map, Vector2i.ZERO)
+	_map.setup(_generator.rooms, _generator.room_map, Vector2i.ZERO)
 
 	# 建立背包系統
 	_player_inventory = PlayerInventory.new()
@@ -71,8 +62,36 @@ func _generate_dungeon() -> void:
 	_player_inventory.add_item(ItemInstance.new("dragon_set_helm"))
 	_player_inventory.add_item(ItemInstance.new("dragon_set_armor"))
 
-	# 測試用：在起始房間生成一個敵人
-	_spawn_test_enemies()
+
+## 根據 RoomData 建立 DungeonRoom 節點
+func _create_room_node(data: DungeonGenerator.RoomData) -> DungeonRoom:
+	var room := DungeonRoom.new()
+	room.room_type = data.room_type
+	room.grid_pos = data.grid_pos
+	room.connections = data.connections
+	room.position = DungeonRoom.grid_to_world(data.grid_pos)
+	rooms_container.add_child(room)
+	room.set_player(player)
+	_bind_room_doors(room)
+	_room_nodes[data.grid_pos] = room
+	return room
+
+
+## 為房間生成敵人（MONSTER / ELITE 房間才生成）
+func _spawn_enemies_for_room(room: DungeonRoom) -> void:
+	if room.room_type != DungeonRoom.RoomType.MONSTER and room.room_type != DungeonRoom.RoomType.ELITE:
+		return
+	var count := 3 if room.room_type == DungeonRoom.RoomType.ELITE else 2
+	var room_center: Vector2 = DungeonRoom.grid_to_world(room.grid_pos)
+	for i in count:
+		var enemy := EnemyBase.new()
+		enemy.max_hp = 50.0 if room.room_type == DungeonRoom.RoomType.ELITE else 30.0
+		enemy.move_speed = 100.0 if room.room_type == DungeonRoom.RoomType.ELITE else 80.0
+		enemy.contact_damage = 8.0 if room.room_type == DungeonRoom.RoomType.ELITE else 5.0
+		var angle := (i as float) * TAU / count
+		enemy.global_position = room_center + Vector2(cos(angle), sin(angle)) * 150.0
+		rooms_container.add_child(enemy)
+		enemy.setup(player)
 
 
 func _bind_room_doors(room: DungeonRoom) -> void:
@@ -86,6 +105,37 @@ func _bind_room_doors(room: DungeonRoom) -> void:
 			if body == player:
 				player.unregister_interactable(area)
 		)
+
+
+## 進入房間：更新位置、地圖、移動玩家和相機、顯示當前房間
+func _on_enter_room(room: DungeonRoom) -> void:
+	_current_grid_pos = room.grid_pos
+
+	# 更新地圖
+	_map.mark_explored(room.grid_pos)
+	_map.update_current_pos(room.grid_pos)
+
+	# 清除玩家的互動清單
+	player._nearby_interactables.clear()
+
+	# 預設放在房間中心（透過門進入時會由 _do_room_switch 覆蓋）
+	player.global_position = DungeonRoom.grid_to_world(room.grid_pos)
+
+	# Camera 切到新房間
+	camera.position = DungeonRoom.grid_to_world(room.grid_pos)
+
+	# 只顯示當前房間
+	_show_only_current_room()
+
+	# 為有敵人的房間生成怪物
+	_spawn_enemies_for_room(room)
+
+	# 如果是出口房間
+	if room.room_type == DungeonRoom.RoomType.EXIT:
+		print("[Dungeon] Run complete!")
+		SceneTransition.fade_only(func() -> void:
+			get_tree().change_scene_to_file("res://game/objects/homestead/homestead.tscn")
+		, 0.3)
 
 
 func _on_player_interacted(target: Area2D) -> void:
@@ -116,32 +166,14 @@ func _move_to_adjacent_room(from_pos: Vector2i, dir: int) -> void:
 
 
 func _do_room_switch(to_pos: Vector2i, dir: int) -> void:
-	_current_grid_pos = to_pos
+	# 進入新房間
+	var target_room: DungeonRoom = _room_nodes[to_pos]
+	_on_enter_room(target_room)
 
-	# 更新地圖：標記已探索並更新當前位置
-	_map.mark_explored(to_pos)
-	_map.update_current_pos(to_pos)
-
-	# 清除玩家的互動清單
-	player._nearby_interactables.clear()
-
-	# 計算玩家在新房間的入口位置
-	var room_center: Vector2 = DungeonRoom.grid_to_world(to_pos)
+	# 計算從反方向進入的偏移
 	var enter_dir: int = DungeonGenerator.OPPOSITE_DIR[dir] as int
 	var entry_offset: Vector2 = _get_entry_offset(enter_dir)
-	player.global_position = room_center + entry_offset
-
-	# Camera 切到新房間
-	camera.position = room_center
-
-	# 只顯示當前房間
-	_show_only_current_room()
-
-	# 如果是出口房間
-	var target_room: DungeonRoom = _room_nodes[to_pos]
-	if target_room.room_type == DungeonRoom.RoomType.EXIT:
-		print("[Dungeon] 到達出口房間！")
-		# TODO: 進入下一層或回到家園
+	player.global_position = DungeonRoom.grid_to_world(to_pos) + entry_offset
 
 
 ## 只顯示當前房間，隱藏所有其他房間
@@ -170,27 +202,6 @@ func _get_entry_offset(from_dir: int) -> Vector2:
 		DungeonGenerator.DIR_RIGHT:
 			return Vector2(hw, 0)
 	return Vector2.ZERO
-
-
-func _place_player_in_start() -> void:
-	_current_grid_pos = Vector2i.ZERO
-	var start_world: Vector2 = DungeonRoom.grid_to_world(Vector2i.ZERO)
-	player.global_position = start_world
-	camera.position = start_world
-
-
-func _spawn_test_enemies() -> void:
-	# 在起始房間中心附近生成 3 個測試敵人
-	var start_world: Vector2 = DungeonRoom.grid_to_world(Vector2i.ZERO)
-	for i in 3:
-		var enemy := EnemyBase.new()
-		enemy.max_hp = 30.0
-		enemy.move_speed = 80.0
-		enemy.contact_damage = 5.0
-		var angle := (i as float) * TAU / 3.0
-		enemy.global_position = start_world + Vector2(cos(angle), sin(angle)) * 150.0
-		rooms_container.add_child(enemy)
-		enemy.setup(player)
 
 
 func _get_current_room() -> DungeonRoom:

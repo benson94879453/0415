@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://bqoqgnqkdqrkd"]
 
 [ext_resource type="Script" uid="uid://cjfnhowrl87fx" path="res://game/objects/dungeon/dungeon.gd" id="1"]
-[ext_resource type="Script" uid="uid://c82ig1md67747" path="res://game/objects/homestead/player.gd" id="2"]
+[ext_resource type="Script" uid="uid://bq4uah1rnp6bg" path="res://game/objects/combat/combat_player.gd" id="2"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
 size = Vector2(24, 24)
