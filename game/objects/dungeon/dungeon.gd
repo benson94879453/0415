@@ -59,7 +59,7 @@ func _init_dungeon() -> void:
 	add_child(_inventory_ui)
 	_inventory_ui.setup(_player_inventory)
 	_inventory_ui.item_dropped_from_inventory.connect(_on_inventory_item_dropped)
-	_inventory_ui.blueprint_dropped_at_slot.connect(_on_blueprint_dropped_at_slot)
+	_inventory_ui.blueprint_applied_to_slot.connect(_on_blueprint_applied_to_slot)
 
 	_ground_ui = GroundContainerUI.new()
 	add_child(_ground_ui)
@@ -146,6 +146,13 @@ func _on_enter_room(room: DungeonRoom) -> void:
 
 	# 只顯示當前房間
 	_show_only_current_room()
+
+	# Update inventory UI with current room's slot data
+	if _inventory_ui != null:
+		if room.has_method("get_north_slots_info"):
+			_inventory_ui.set_dungeon_slots(room.get_north_slots_info())
+		else:
+			_inventory_ui.set_dungeon_slots([])
 
 	# 為有敵人的房間生成怪物
 	_spawn_enemies_for_room(room)
@@ -250,31 +257,23 @@ func _on_inventory_item_dropped(item: ItemInstance) -> void:
 		_player_inventory.add_item(item)
 
 
-func _on_blueprint_dropped_at_slot(item: ItemInstance, screen_pos: Vector2) -> void:
+func _on_blueprint_applied_to_slot(item: ItemInstance, slot_index: int) -> void:
 	var room := _get_current_room()
 	if room == null:
 		_player_inventory.add_item(item)
 		return
-	# Convert screen position to world position
-	var world_pos: Vector2 = get_viewport().canvas_transform.affine_inverse() * screen_pos
-	# Search for Door or WallSlot nodes in the current room
-	var candidates: Array[Node] = room.find_children("*", "Area2D")
-	var nearest_slot: Area2D = null
-	var nearest_dist: float = 80.0  # max detection distance in pixels
-	for node in candidates:
-		if not (node is Door or node is WallSlot):
-			continue
-		var slot: Area2D = node as Area2D
-		var dist: float = world_pos.distance_to(slot.global_position)
-		if dist < nearest_dist:
-			nearest_dist = dist
-			nearest_slot = slot
-	if nearest_slot != null:
-		print("[Dungeon] Blueprint '%s' dropped near slot at %s" % [item.item_id, nearest_slot.global_position])
-		_apply_blueprint_to_slot(item, nearest_slot)
-	else:
-		print("[Dungeon] No valid slot found, restoring blueprint to inventory")
+	# Find the Door/WallSlot with matching slot_index
+	var target_slot: Area2D = null
+	for slot in room.north_slots:
+		if slot is Door or slot is WallSlot:
+			if slot.slot_index == slot_index:
+				target_slot = slot
+				break
+	if target_slot == null:
+		print("[Dungeon] Slot index %d not found" % slot_index)
 		_player_inventory.add_item(item)
+		return
+	_apply_blueprint_to_slot(item, target_slot)
 
 
 func _apply_blueprint_to_slot(item: ItemInstance, slot_node: Area2D) -> void:
@@ -340,6 +339,10 @@ func _apply_blueprint_to_slot(item: ItemInstance, slot_node: Area2D) -> void:
 
 	# ── 隱藏北牆插槽（已使用） ──
 	current_room.hide_north_slots()
+
+	# Refresh slot data in inventory UI (slots may be hidden now)
+	if _inventory_ui != null:
+		_inventory_ui.set_dungeon_slots(current_room.get_north_slots_info())
 
 	# ── 更新地圖 ──
 	_map.setup(_generator.rooms, _generator.room_map, Vector2i.ZERO)

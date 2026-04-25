@@ -4,8 +4,8 @@ extends CanvasLayer
 ## 當物品從背包中丟棄時發出（拖出面板或按 Q 鍵）
 signal item_dropped_from_inventory(item: ItemInstance)
 
-## 當藍圖物品被拖到地牢插槽上時發出
-signal blueprint_dropped_at_slot(item: ItemInstance, screen_pos: Vector2)
+## 當藍圖被拖到插槽圖示上時發出
+signal blueprint_applied_to_slot(item: ItemInstance, slot_index: int)
 
 ## 背包 UI
 ## 格子背景 (_grid_container) 與物品圖層 (_item_layer) 分離
@@ -33,6 +33,10 @@ var _item_layer: Control  ## 物品紋理圖層，疊在 grid 正上方
 var _tooltip: Label
 var _panel: Panel
 var _bg_overlay: ColorRect
+var _dungeon_slots: Array = []  # Slot data from dungeon
+var _slot_icon_panel: HBoxContainer  # Container for slot icons above inventory
+var _slot_icon_controls: Array = []  # Array of Panel nodes for slot icons
+var _hovered_slot_icon: int = -1  # Which slot icon the mouse is over during drag
 
 
 ## 格子索引 → 列號（避免 integer division 警告）
@@ -95,6 +99,12 @@ func _ready() -> void:
 	_drag_icon.z_index = 100
 	_drag_icon.visible = false
 	add_child(_drag_icon)
+
+	# Slot icon panel — shown above inventory when dragging blueprints
+	_slot_icon_panel = HBoxContainer.new()
+	_slot_icon_panel.name = "SlotIconPanel"
+	_slot_icon_panel.visible = false
+	add_child(_slot_icon_panel)
 
 
 func setup(inv: PlayerInventory) -> void:
@@ -323,6 +333,12 @@ func _process(_delta: float) -> void:
 		if new_hover != _hover_slot:
 			_hover_slot = new_hover
 			_refresh_items()
+	# Update slot icon hover state
+	if _dragging and _drag_item != null and _is_blueprint_item(_drag_item) and _slot_icon_panel != null and _slot_icon_panel.visible:
+		var new_hover := _get_hit_slot_icon(get_viewport().get_mouse_position())
+		if new_hover != _hovered_slot_icon:
+			_hovered_slot_icon = new_hover
+			_update_slot_icon_highlights()
 
 
 func _input(event: InputEvent) -> void:
@@ -373,6 +389,13 @@ func _on_left_click(event: InputEventMouseButton) -> void:
 func _on_left_release(event: InputEventMouseButton) -> void:
 	if not _dragging:
 		return
+	# Check if dropped on a slot icon (blueprint targeting)
+	if _slot_icon_panel != null and _slot_icon_panel.visible and _drag_item != null:
+		if _is_blueprint_item(_drag_item):
+			var hit_slot := _get_hit_slot_icon(event.global_position)
+			if hit_slot >= 0:
+				_apply_blueprint_to_slot_icon(hit_slot)
+				return
 	var target_slot := _get_slot_at_position(event.global_position)
 	if target_slot < 0:
 		if _is_outside_panel(event.global_position):
@@ -443,6 +466,10 @@ func _start_drag(item: ItemInstance, anchor: Vector2i) -> void:
 	_drag_icon.visible = true
 	_drag_icon.global_position = get_viewport().get_mouse_position() - _drag_icon_offset
 	_refresh_items()
+	# Show slot icons if dragging a blueprint and dungeon has slots
+	if _is_blueprint_item(item) and not _dungeon_slots.is_empty():
+		_rebuild_slot_icons()
+		_slot_icon_panel.visible = true
 
 
 func _update_drag_icon() -> void:
@@ -511,10 +538,7 @@ func _end_drag(target_slot: int) -> void:
 	# Dropped outside panel → transfer to ground via signal
 	if target_slot < 0:
 		_inventory.remove_item(item)
-		if item.get_definition().get("item_category", "") == "blueprint":
-			blueprint_dropped_at_slot.emit(item, get_viewport().get_mouse_position())
-		else:
-			item_dropped_from_inventory.emit(item)
+		item_dropped_from_inventory.emit(item)
 		_clear_drag()
 		return
 
@@ -555,6 +579,10 @@ func _clear_drag() -> void:
 	_hovered_item_slot = -1
 	_drag_icon.visible = false
 	_tooltip.visible = false
+	# Hide slot icons
+	if _slot_icon_panel != null:
+		_slot_icon_panel.visible = false
+	_hovered_slot_icon = -1
 	_refresh_items()
 
 
@@ -650,3 +678,103 @@ func _compute_anchor(clicked_slot: int, item: ItemInstance) -> Vector2i:
 	var click_x: int = _slot_col(clicked_slot)
 	var click_y: int = _slot_row(clicked_slot)
 	return Vector2i(click_x - start_x, click_y - start_y)
+
+
+func _is_blueprint_item(item: ItemInstance) -> bool:
+	var def := item.get_definition()
+	return def.get("item_category", "") == "blueprint"
+
+
+func set_dungeon_slots(slots_data: Array) -> void:
+	_dungeon_slots = slots_data
+
+
+func _rebuild_slot_icons() -> void:
+	# Clear old icons
+	for child in _slot_icon_panel.get_children():
+		child.queue_free()
+	_slot_icon_controls.clear()
+
+	if _dungeon_slots.is_empty():
+		return
+
+	var icon_size := 110.0
+	var gap := 12.0
+	_slot_icon_panel.add_theme_constant_override("separation", int(gap))
+
+	for i in _dungeon_slots.size():
+		var slot_data: Dictionary = _dungeon_slots[i]
+		var is_blank: bool = slot_data.get("is_blank", true)
+
+		var panel := Panel.new()
+		panel.custom_minimum_size = Vector2(icon_size, icon_size)
+
+		var style := StyleBoxFlat.new()
+		if is_blank:
+			style.bg_color = Color(0.25, 0.25, 0.3, 0.9)
+		else:
+			style.bg_color = Color(0.4, 0.3, 0.2, 0.9)
+		style.border_color = Color(0.4, 0.4, 0.5)
+		style.set_border_width_all(1)
+		style.set_content_margin_all(4)
+		panel.add_theme_stylebox_override("panel", style)
+
+		var lbl := Label.new()
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", 16)
+		if is_blank:
+			lbl.text = "空白牆"
+		else:
+			lbl.text = "門"
+		panel.add_child(lbl)
+
+		_slot_icon_panel.add_child(panel)
+		_slot_icon_controls.append(panel)
+
+	# Position above the inventory panel
+	var total_width := _dungeon_slots.size() * icon_size + (_dungeon_slots.size() - 1) * gap
+	_slot_icon_panel.offset_left = -total_width * 0.5
+	_slot_icon_panel.offset_top = _panel.offset_top - 12.0 - icon_size
+	_slot_icon_panel.offset_right = total_width * 0.5
+	_slot_icon_panel.offset_bottom = _panel.offset_top - 12.0
+
+
+func _get_hit_slot_icon(global_pos: Vector2) -> int:
+	if _slot_icon_panel == null or not _slot_icon_panel.visible:
+		return -1
+	for i in _slot_icon_controls.size():
+		var ctrl: Control = _slot_icon_controls[i]
+		var rect := Rect2(ctrl.global_position, ctrl.size)
+		if rect.has_point(global_pos):
+			return i
+	return -1
+
+
+func _apply_blueprint_to_slot_icon(icon_index: int) -> void:
+	if icon_index < 0 or icon_index >= _dungeon_slots.size():
+		_cancel_drag()
+		return
+	var item := _drag_item
+	if item == null or not _is_blueprint_item(item):
+		_cancel_drag()
+		return
+	var slot_data: Dictionary = _dungeon_slots[icon_index]
+	_inventory.remove_item(item)
+	blueprint_applied_to_slot.emit(item, slot_data["slot_index"])
+	_clear_drag()
+
+
+func _update_slot_icon_highlights() -> void:
+	for i in _slot_icon_controls.size():
+		var panel: Panel = _slot_icon_controls[i]
+		var style: StyleBoxFlat = panel.get_theme_stylebox("panel")
+		if style:
+			var new_style := style.duplicate()
+			if i == _hovered_slot_icon:
+				new_style.border_color = Color(0.8, 0.8, 0.2)
+				new_style.set_border_width_all(3)
+			else:
+				new_style.border_color = Color(0.4, 0.4, 0.5)
+				new_style.set_border_width_all(1)
+			panel.add_theme_stylebox_override("panel", new_style)

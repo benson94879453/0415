@@ -458,6 +458,25 @@ func hide_north_slots() -> void:
 		_north_slots_node.visible = false
 
 
+## 取得北牆插槽列表（供 Tab 循環選擇使用）
+func get_north_slots() -> Array:
+	return north_slots
+
+
+## 取得北牆插槽資訊（供 InventoryUI 顯示插槽圖示用）
+func get_north_slots_info() -> Array:
+	if _north_slots_node == null or not _north_slots_node.visible:
+		return []
+	var result := []
+	for slot in north_slots:
+		if slot is Door or slot is WallSlot:
+			result.append({
+				"slot_index": slot.slot_index,
+				"is_blank": slot.is_blank,
+			})
+	return result
+
+
 ## 序列化地面物品（存檔用）
 func serialize_ground() -> Dictionary:
 	return {
