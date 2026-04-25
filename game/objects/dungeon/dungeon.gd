@@ -97,15 +97,18 @@ func _spawn_enemies_for_room(room: DungeonRoom) -> void:
 
 func _bind_room_doors(room: DungeonRoom) -> void:
 	for dir in room.door_areas:
-		var area: Area2D = room.door_areas[dir]
-		area.body_entered.connect(func(body: Node2D) -> void:
-			if body == player:
-				player.register_interactable(area)
-		)
-		area.body_exited.connect(func(body: Node2D) -> void:
-			if body == player:
-				player.unregister_interactable(area)
-		)
+		_bind_door_signals(room.door_areas[dir])
+
+
+func _bind_door_signals(area: Area2D) -> void:
+	area.body_entered.connect(func(body: Node2D) -> void:
+		if body == player:
+			player.register_interactable(area)
+	)
+	area.body_exited.connect(func(body: Node2D) -> void:
+		if body == player:
+			player.unregister_interactable(area)
+	)
 
 
 ## 進入房間：更新位置、地圖、移動玩家和相機、顯示當前房間
@@ -259,4 +262,75 @@ func _on_blueprint_dropped_at_slot(item: ItemInstance, screen_pos: Vector2) -> v
 
 
 func _apply_blueprint_to_slot(item: ItemInstance, slot_node: Area2D) -> void:
-	print("[Dungeon] Blueprint %s applied to slot at %s" % [item.item_id, slot_node.position])
+	var current_room := _get_current_room()
+	if current_room == null:
+		_player_inventory.add_item(item)
+		return
+
+	# ── 解析藍圖 room_type ──
+	var blueprint_data: Dictionary = item.get_definition().get("blueprint", {})
+	var room_type_str: String = blueprint_data.get("room_type", "")
+	if room_type_str.is_empty():
+		print("[Dungeon] Invalid blueprint: no room_type")
+		_player_inventory.add_item(item)
+		return
+
+	var room_type_keys: Array = DungeonRoom.RoomType.keys()
+	var type_index: int = room_type_keys.find(room_type_str)
+	if type_index < 0:
+		print("[Dungeon] Unknown room_type: %s" % room_type_str)
+		_player_inventory.add_item(item)
+		return
+	var new_room_type: int = type_index
+
+	var target_pos: Vector2i = slot_node.target_grid_pos
+	var is_door: bool = not slot_node.is_blank  # Door = not blank
+
+	# ── Door 插槽：如果房間已存在，更換類型 ──
+	if is_door and target_pos in _room_nodes:
+		var existing_room: DungeonRoom = _room_nodes[target_pos]
+		existing_room.update_room_type(new_room_type)
+		print("[Dungeon] Changed room at %s to %s via blueprint %s" % [
+			target_pos,
+			DungeonRoom.RoomType.keys()[new_room_type],
+			item.item_id,
+		])
+		# 藍圖消耗（不返還背包）
+		return
+
+	# ── 檢查目標位置是否已有房間（WallSlot 或新建情況） ──
+	if target_pos in _room_nodes:
+		print("[Dungeon] Room already exists at %s, cannot place blueprint" % target_pos)
+		_player_inventory.add_item(item)
+		return
+
+	# ── 透過生成器建立新房間 ──
+	var new_data: DungeonGenerator.RoomData = _generator.create_north_room(
+		current_room.grid_pos, new_room_type
+	)
+	if new_data == null:
+		print("[Dungeon] Generator rejected room creation at %s" % target_pos)
+		_player_inventory.add_item(item)
+		return
+
+	# ── 建立房間節點 ──
+	var new_room := _create_room_node(new_data)
+
+	# ── 為當前房間新增北方門（讓玩家可以走過去） ──
+	current_room.add_connection_door(DungeonRoom.Dir.UP)
+	# 綁定新門的互動信號
+	if DungeonRoom.Dir.UP in current_room.door_areas:
+		_bind_door_signals(current_room.door_areas[DungeonRoom.Dir.UP])
+
+	# ── 隱藏北牆插槽（已使用） ──
+	current_room.hide_north_slots()
+
+	# ── 更新地圖 ──
+	_map.setup(_generator.rooms, _generator.room_map, Vector2i.ZERO)
+
+	print("[Dungeon] Created %s room at %s via blueprint %s" % [
+		DungeonRoom.RoomType.keys()[new_room_type],
+		target_pos,
+		item.item_id,
+	])
+	# 藍圖消耗 — 不返還背包

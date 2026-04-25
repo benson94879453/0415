@@ -44,6 +44,10 @@ const GROUND_COLS := 6
 const GROUND_DEFAULT_ROWS := 4
 const GROUND_MAX_ROWS := 20
 
+## 北牆插槽場景
+const DOOR_SCENE: PackedScene = preload("res://game/objects/dungeon/door.tscn")
+const WALL_SLOT_SCENE: PackedScene = preload("res://game/objects/dungeon/wall_slot.tscn")
+
 var room_type: RoomType = RoomType.MONSTER
 var grid_pos: Vector2i = Vector2i.ZERO
 
@@ -66,7 +70,10 @@ var reward_granted: bool = false
 
 signal room_cleared(room: DungeonRoom)
 
-## 北牆插槽系統（暫時使用 ColorRect，Task 4 將替換為 Door/WallSlot）
+## 牆壁/門容器（方便重建）
+var _walls_container: Node2D
+
+## 北牆插槽系統（Door / WallSlot Area2D 節點）
 var _north_slots_node: Node2D
 var north_slots: Array = []
 
@@ -91,6 +98,9 @@ func _on_room_cleared(_room: DungeonRoom) -> void:
 func _build_room() -> void:
 	_create_floor()
 	_create_label()
+	_walls_container = Node2D.new()
+	_walls_container.name = "WallsContainer"
+	add_child(_walls_container)
 	_create_walls_and_doors()
 	_init_ground_container()
 
@@ -232,7 +242,7 @@ func _add_wall_segment(rect_min: Vector2, rect_max: Vector2) -> void:
 	shape.shape = rect_shape
 	shape.position = (rect_min + rect_max) / 2.0
 	body.add_child(shape)
-	add_child(body)
+	_walls_container.add_child(body)
 
 
 func _add_wall_visual(rect_min: Vector2, rect_max: Vector2) -> void:
@@ -242,7 +252,7 @@ func _add_wall_visual(rect_min: Vector2, rect_max: Vector2) -> void:
 	visual.offset_right = rect_max.x
 	visual.offset_bottom = rect_max.y
 	visual.color = Color(0.4, 0.35, 0.45, 1)
-	add_child(visual)
+	_walls_container.add_child(visual)
 
 
 func _add_door(dir: int, center: Vector2, size: Vector2) -> void:
@@ -259,7 +269,7 @@ func _add_door(dir: int, center: Vector2, size: Vector2) -> void:
 	shape.shape = rect_shape
 	area.add_child(shape)
 
-	add_child(area)
+	_walls_container.add_child(area)
 	door_areas[dir] = area
 
 
@@ -270,7 +280,7 @@ func _add_door_visual(center: Vector2, size: Vector2) -> void:
 	visual.offset_right = center.x + size.x / 2.0
 	visual.offset_bottom = center.y + size.y / 2.0
 	visual.color = Color(0.5, 0.4, 0.3, 0.6)
-	add_child(visual)
+	_walls_container.add_child(visual)
 
 
 ## 設定玩家參照（由 dungeon.gd 呼叫）
@@ -378,7 +388,7 @@ func _get_drop_position(item: ItemInstance) -> Vector2:
 	return Vector2(randf_range(-safe_w, safe_w), randf_range(-safe_h, safe_h))
 
 
-## 顯示北牆插槽（暫時使用 ColorRect，Task 4 將替換為 Door/WallSlot）
+## 顯示北牆插槽（Door / WallSlot Area2D 節點）
 func reveal_north_slots() -> void:
 	if slots_revealed:
 		return
@@ -389,38 +399,63 @@ func reveal_north_slots() -> void:
 		_north_slots_node.name = "NorthSlots"
 		add_child(_north_slots_node)
 
-	# 插槽位置參數
-	var slot_width: float = 80.0
-	var slot_height: float = 30.0
-	var slot_y: float = -ROOM_HEIGHT / 2.0 + 15.0  # 靠近北牆頂部
+	var slot_y: float = -ROOM_HEIGHT / 2.0 + 15.0
+	var north_target := grid_pos + Vector2i(0, -1)
 
-	# 三個插槽的 x 位置
-	var slot_positions: Array[float] = [
-		-ROOM_WIDTH / 6.0,  # 左側
-		0.0,                 # 中間
-		ROOM_WIDTH / 6.0    # 右側
-	]
+	# 左側 WallSlot (index 0)
+	var left_slot := WALL_SLOT_SCENE.instantiate()
+	left_slot.setup(0, grid_pos, north_target, true, RoomType.MONSTER)
+	left_slot.position = Vector2(-ROOM_WIDTH / 6.0, slot_y)
+	_north_slots_node.add_child(left_slot)
+	north_slots.append(left_slot)
 
-	# 顏色：中間為綠色（主動門），兩側為灰色（空白牆）
-	var slot_colors: Array[Color] = [
-		Color.GRAY,    # 左側
-		Color.GREEN,   # 中間
-		Color.GRAY     # 右側
-	]
+	# 中間 Door (index 1) — 預設指向北方，MONSTER 類型
+	var center_door := DOOR_SCENE.instantiate()
+	center_door.setup(1, grid_pos, north_target, false, RoomType.MONSTER)
+	center_door.position = Vector2(0.0, slot_y)
+	_north_slots_node.add_child(center_door)
+	north_slots.append(center_door)
 
-	# 創建三個插槽
-	for i in range(3):
-		var slot := ColorRect.new()
-		slot.name = "NorthSlot_%d" % i
-		slot.position = Vector2(slot_positions[i], slot_y)
-		slot.size = Vector2(slot_width, slot_height)
-		slot.color = slot_colors[i]
-		slot.pivot_offset = Vector2(slot_width / 2.0, slot_height / 2.0)
-		_north_slots_node.add_child(slot)
-		north_slots.append(slot)
+	# 右側 WallSlot (index 2)
+	var right_slot := WALL_SLOT_SCENE.instantiate()
+	right_slot.setup(2, grid_pos, north_target, true, RoomType.MONSTER)
+	right_slot.position = Vector2(ROOM_WIDTH / 6.0, slot_y)
+	_north_slots_node.add_child(right_slot)
+	north_slots.append(right_slot)
 
 	slots_revealed = true
 	print("[DungeonRoom] North slots revealed")
+
+
+## 新增連接方向並重建牆壁（由 dungeon.gd 在藍圖放置後呼叫）
+func add_connection_door(dir: int) -> void:
+	if dir in connections:
+		return
+	connections.append(dir)
+	# 清除舊的牆壁/門節點，重建
+	for child in _walls_container.get_children():
+		child.queue_free()
+	door_areas.clear()
+	_create_walls_and_doors()
+
+
+## 更新房間類型並刷新地板顏色
+func update_room_type(new_type: RoomType) -> void:
+	room_type = new_type
+	# 更新地板顏色
+	var floor_node := get_node_or_null("Floor")
+	if floor_node is ColorRect:
+		floor_node.color = TYPE_COLORS.get(room_type, Color(0.18, 0.16, 0.22, 1))
+	# 更新標籤
+	var label_node := get_node_or_null("RoomLabel")
+	if label_node is Label:
+		label_node.text = TYPE_LABELS.get(room_type, "???")
+
+
+## 隱藏北牆插槽（藍圖使用後）
+func hide_north_slots() -> void:
+	if _north_slots_node != null:
+		_north_slots_node.visible = false
 
 
 ## 序列化地面物品（存檔用）
