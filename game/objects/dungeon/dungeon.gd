@@ -311,6 +311,10 @@ func _apply_blueprint_to_slot(item: ItemInstance, slot_node: Area2D) -> void:
 			item.item_id,
 		])
 		# 藍圖消耗（不返還背包）
+		# 移除已使用的 slot 並刷新 UI
+		current_room.remove_north_slot(slot_node.slot_index)
+		if _inventory_ui != null:
+			_inventory_ui.set_dungeon_slots(current_room.get_north_slots_info())
 		return
 
 	# ── 檢查目標位置是否已有房間（WallSlot 或新建情況） ──
@@ -337,8 +341,8 @@ func _apply_blueprint_to_slot(item: ItemInstance, slot_node: Area2D) -> void:
 	if DungeonRoom.Dir.UP in current_room.door_areas:
 		_bind_door_signals(current_room.door_areas[DungeonRoom.Dir.UP])
 
-	# ── 隱藏北牆插槽（已使用） ──
-	current_room.hide_north_slots()
+	# ── 移除已使用的北牆插槽 ──
+	current_room.remove_north_slot(slot_node.slot_index)
 
 	# Refresh slot data in inventory UI (slots may be hidden now)
 	if _inventory_ui != null:

@@ -452,9 +452,17 @@ func update_room_type(new_type: RoomType) -> void:
 		label_node.text = TYPE_LABELS.get(room_type, "???")
 
 
-## 隱藏北牆插槽（藍圖使用後）
-func hide_north_slots() -> void:
-	if _north_slots_node != null:
+## 移除指定的北牆插槽（藍圖使用後）
+func remove_north_slot(slot_index: int) -> void:
+	for i in range(north_slots.size() - 1, -1, -1):
+		var slot = north_slots[i]
+		if (slot is Door or slot is WallSlot) and slot.slot_index == slot_index:
+			if is_instance_valid(slot):
+				slot.queue_free()
+			north_slots.remove_at(i)
+			break
+	# 如果所有插槽都已用完，隱藏容器
+	if north_slots.is_empty() and _north_slots_node != null:
 		_north_slots_node.visible = false
 
 
