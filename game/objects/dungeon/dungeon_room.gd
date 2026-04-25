@@ -59,9 +59,33 @@ var _ground_items_node: Node2D  # parent node for GroundItemVisual instances
 var _player_ref: CharacterBody2D = null  # set by dungeon.gd
 var _ground_visuals: Dictionary = {}  # ItemInstance → GroundItemVisual
 
+## 房間清理狀態
+var is_cleared: bool = false
+var slots_revealed: bool = false
+var reward_granted: bool = false
+
+signal room_cleared(room: DungeonRoom)
+
+## 北牆插槽系統（暫時使用 ColorRect，Task 4 將替換為 Door/WallSlot）
+var _north_slots_node: Node2D
+var north_slots: Array = []
+
 
 func _ready() -> void:
 	_build_room()
+
+	# 連接房間清除信號到顯示插槽
+	room_cleared.connect(_on_room_cleared)
+
+	# START 房間立即標記為已清理並顯示北牆插槽
+	if room_type == RoomType.START:
+		is_cleared = true
+		reveal_north_slots()
+
+
+func _on_room_cleared(_room: DungeonRoom) -> void:
+	# 房間清除後顯示北牆插槽
+	reveal_north_slots()
 
 
 func _build_room() -> void:
@@ -69,6 +93,33 @@ func _build_room() -> void:
 	_create_label()
 	_create_walls_and_doors()
 	_init_ground_container()
+
+
+func _process(_delta: float) -> void:
+	# 只有未清除的 MONSTER/ELITE 房間需要檢查敵人數量
+	if is_cleared:
+		return
+	if room_type != RoomType.MONSTER and room_type != RoomType.ELITE:
+		return
+
+	# 檢查房間內的敵人數量
+	var enemies_in_room: int = 0
+	var half_width: float = ROOM_WIDTH / 2.0
+	var half_height: float = ROOM_HEIGHT / 2.0
+
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if not is_instance_valid(enemy):
+			continue
+		# 計算敵人相對於房間中心的距離
+		var enemy_local_pos: Vector2 = to_local(enemy.global_position)
+		if absf(enemy_local_pos.x) <= half_width and absf(enemy_local_pos.y) <= half_height:
+			enemies_in_room += 1
+
+	# 如果房間內沒有敵人了，標記為已清除
+	if enemies_in_room == 0:
+		is_cleared = true
+		print("[DungeonRoom] Room cleared at grid_pos=%s" % grid_pos)
+		room_cleared.emit(self)
 
 
 func _create_floor() -> void:
@@ -242,6 +293,11 @@ func _init_ground_container() -> void:
 	_ground_items_node.name = "GroundItems"
 	add_child(_ground_items_node)
 
+	# 初始化北牆插槽容器節點
+	_north_slots_node = Node2D.new()
+	_north_slots_node.name = "NorthSlots"
+	add_child(_north_slots_node)
+
 
 ## 新增地面物品；自動擴展容器直到 GROUND_MAX_ROWS
 func add_ground_item(item: ItemInstance, world_pos: Vector2) -> bool:
@@ -320,6 +376,51 @@ func _get_drop_position(item: ItemInstance) -> Vector2:
 			return candidate
 	# 10 次都失敗就直接回傳隨機位置
 	return Vector2(randf_range(-safe_w, safe_w), randf_range(-safe_h, safe_h))
+
+
+## 顯示北牆插槽（暫時使用 ColorRect，Task 4 將替換為 Door/WallSlot）
+func reveal_north_slots() -> void:
+	if slots_revealed:
+		return
+
+	# 創建插槽容器節點
+	if _north_slots_node == null:
+		_north_slots_node = Node2D.new()
+		_north_slots_node.name = "NorthSlots"
+		add_child(_north_slots_node)
+
+	# 插槽位置參數
+	var slot_width: float = 80.0
+	var slot_height: float = 30.0
+	var slot_y: float = -ROOM_HEIGHT / 2.0 + 15.0  # 靠近北牆頂部
+
+	# 三個插槽的 x 位置
+	var slot_positions: Array[float] = [
+		-ROOM_WIDTH / 6.0,  # 左側
+		0.0,                 # 中間
+		ROOM_WIDTH / 6.0    # 右側
+	]
+
+	# 顏色：中間為綠色（主動門），兩側為灰色（空白牆）
+	var slot_colors: Array[Color] = [
+		Color.GRAY,    # 左側
+		Color.GREEN,   # 中間
+		Color.GRAY     # 右側
+	]
+
+	# 創建三個插槽
+	for i in range(3):
+		var slot := ColorRect.new()
+		slot.name = "NorthSlot_%d" % i
+		slot.position = Vector2(slot_positions[i], slot_y)
+		slot.size = Vector2(slot_width, slot_height)
+		slot.color = slot_colors[i]
+		slot.pivot_offset = Vector2(slot_width / 2.0, slot_height / 2.0)
+		_north_slots_node.add_child(slot)
+		north_slots.append(slot)
+
+	slots_revealed = true
+	print("[DungeonRoom] North slots revealed")
 
 
 ## 序列化地面物品（存檔用）
