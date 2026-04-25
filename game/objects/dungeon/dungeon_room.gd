@@ -39,6 +39,11 @@ const TYPE_LABELS: Dictionary = {
 	RoomType.EXIT:    "出口",
 }
 
+## 地面物品容器設定
+const GROUND_COLS := 6
+const GROUND_DEFAULT_ROWS := 4
+const GROUND_MAX_ROWS := 20
+
 var room_type: RoomType = RoomType.MONSTER
 var grid_pos: Vector2i = Vector2i.ZERO
 
@@ -47,6 +52,12 @@ var connections: Array[int] = []  # Dir values
 
 ## 每個方向的門 Area2D 參照
 var door_areas: Dictionary = {}  # Dir -> Area2D
+
+## 地面物品系統
+var ground_container: InvContainer
+var _ground_items_node: Node2D  # parent node for GroundItemVisual instances
+var _player_ref: CharacterBody2D = null  # set by dungeon.gd
+var _ground_visuals: Dictionary = {}  # ItemInstance → GroundItemVisual
 
 
 func _ready() -> void:
@@ -57,6 +68,7 @@ func _build_room() -> void:
 	_create_floor()
 	_create_label()
 	_create_walls_and_doors()
+	_init_ground_container()
 
 
 func _create_floor() -> void:
@@ -208,6 +220,119 @@ func _add_door_visual(center: Vector2, size: Vector2) -> void:
 	visual.offset_bottom = center.y + size.y / 2.0
 	visual.color = Color(0.5, 0.4, 0.3, 0.6)
 	add_child(visual)
+
+
+## 設定玩家參照（由 dungeon.gd 呼叫）
+func set_player(p: CharacterBody2D) -> void:
+	_player_ref = p
+	for visual in _ground_visuals.values():
+		if not is_instance_valid(visual):
+			continue
+		if not visual.body_entered.is_connected(_on_ground_body_entered.bind(visual)):
+			visual.body_entered.connect(_on_ground_body_entered.bind(visual))
+		if not visual.body_exited.is_connected(_on_ground_body_exited.bind(visual)):
+			visual.body_exited.connect(_on_ground_body_exited.bind(visual))
+
+
+## 初始化地面物品容器與視覺節點
+func _init_ground_container() -> void:
+	ground_container = InvContainer.new(GROUND_COLS, GROUND_DEFAULT_ROWS)
+	ground_container.contents_changed.connect(_on_ground_contents_changed)
+	_ground_items_node = Node2D.new()
+	_ground_items_node.name = "GroundItems"
+	add_child(_ground_items_node)
+
+
+## 新增地面物品；自動擴展容器直到 GROUND_MAX_ROWS
+func add_ground_item(item: ItemInstance, world_pos: Vector2) -> bool:
+	item.metadata["drop_pos_x"] = world_pos.x
+	item.metadata["drop_pos_y"] = world_pos.y
+	if ground_container.add_item(item) >= 0:
+		return true
+	# 自動擴充列數
+	while ground_container.height < GROUND_MAX_ROWS:
+		ground_container.resize(GROUND_COLS, ground_container.height + 2)
+		if ground_container.add_item(item) >= 0:
+			return true
+	return false
+
+
+## 容器內容變動時同步視覺節點
+func _on_ground_contents_changed() -> void:
+	var current_items: Array = ground_container.get_all_items()
+	var current_set: Dictionary = {}
+	for it in current_items:
+		current_set[it] = true
+
+	# 移除已不在容器中的視覺
+	for it in _ground_visuals.keys():
+		if not current_set.has(it):
+			var old_vis: GroundItemVisual = _ground_visuals[it]
+			if is_instance_valid(old_vis):
+				if is_instance_valid(_player_ref):
+					_player_ref.unregister_interactable(old_vis)
+				old_vis.queue_free()
+			_ground_visuals.erase(it)
+
+	# 為新物品建立視覺
+	for it in current_items:
+		if _ground_visuals.has(it):
+			continue
+		# 計算掉落位置
+		var world_pos := _get_drop_position(it)
+		var visual := GroundItemVisual.create(it, self, world_pos)
+		# 綁定玩家互動
+		if is_instance_valid(_player_ref):
+			visual.body_entered.connect(_on_ground_body_entered.bind(visual))
+			visual.body_exited.connect(_on_ground_body_exited.bind(visual))
+		_ground_items_node.add_child(visual)
+		_ground_visuals[it] = visual
+
+
+func _on_ground_body_entered(body: Node2D, visual: GroundItemVisual) -> void:
+	if body == _player_ref:
+		_player_ref.register_interactable(visual)
+
+
+func _on_ground_body_exited(body: Node2D, visual: GroundItemVisual) -> void:
+	if body == _player_ref:
+		_player_ref.unregister_interactable(visual)
+
+
+## 從 item.metadata 取得掉落位置，缺少則隨機生成（避開重疊）
+func _get_drop_position(item: ItemInstance) -> Vector2:
+	if item.metadata.has("drop_pos_x") and item.metadata.has("drop_pos_y"):
+		return Vector2(item.metadata["drop_pos_x"], item.metadata["drop_pos_y"])
+	# 房間安全區域 70%
+	var safe_w := ROOM_WIDTH * 0.35
+	var safe_h := ROOM_HEIGHT * 0.35
+	for _attempt in range(10):
+		var offset := Vector2(randf_range(-safe_w, safe_w), randf_range(-safe_h, safe_h))
+		var candidate := offset
+		var too_close := false
+		for vis in _ground_visuals.values():
+			if not is_instance_valid(vis):
+				continue
+			if candidate.distance_to(vis.position) < 30.0:
+				too_close = true
+				break
+		if not too_close:
+			return candidate
+	# 10 次都失敗就直接回傳隨機位置
+	return Vector2(randf_range(-safe_w, safe_w), randf_range(-safe_h, safe_h))
+
+
+## 序列化地面物品（存檔用）
+func serialize_ground() -> Dictionary:
+	return {
+		"container": ground_container.serialize(),
+	}
+
+
+## 反序列化地面物品（讀檔用）
+func deserialize_ground(data: Dictionary) -> void:
+	if data.has("container"):
+		ground_container.deserialize(data["container"])
 
 
 ## 取得房間在世界空間中的中心位置 (根據 grid_pos)
